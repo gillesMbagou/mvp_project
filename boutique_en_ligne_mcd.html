@@ -1,0 +1,178 @@
+
+<h2 class="sr-only">Modèle Conceptuel de Données — Boutique en ligne : 8 entités et leurs relations</h2>
+
+<style>
+#erd-wrap { padding: 0.5rem 0; }
+.legend { display:flex; flex-wrap:wrap; gap:10px; margin:14px 0 4px; font-size:12px; color:var(--color-text-secondary); }
+.legend-item { display:flex; align-items:center; gap:6px; }
+.legend-dot { width:10px; height:10px; border-radius:2px; }
+.card-mcd { background:var(--color-background-secondary); border-radius:var(--border-radius-lg); padding:1rem 1.25rem; margin-bottom:1rem; border:0.5px solid var(--color-border-tertiary); }
+.justify-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px; margin-top:0.5rem; }
+.j-row { display:flex; gap:8px; align-items:flex-start; font-size:13px; line-height:1.5; }
+.j-badge { flex-shrink:0; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500; }
+</style>
+
+<div id="erd-wrap">
+  <div id="erd"></div>
+</div>
+
+<div class="card-mcd">
+  <p style="font-size:13px;font-weight:500;margin:0 0 10px;color:var(--color-text-primary)">Justification des champs ajoutés</p>
+  <div class="justify-grid">
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-info);color:var(--color-text-info)">User</span>
+      <span style="color:var(--color-text-secondary)"><code>created_at</code>, <code>is_active</code> — traçabilité, désactivation sans suppression</span>
+    </div>
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-info);color:var(--color-text-info)">Product</span>
+      <span style="color:var(--color-text-secondary)"><code>description</code>, <code>sku</code>, <code>is_active</code> — catalogue riche, référence entrepôt</span>
+    </div>
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-info);color:var(--color-text-info)">Category</span>
+      <span style="color:var(--color-text-secondary)"><code>slug</code>, <code>parent_id</code> — URL SEO, hiérarchie de catégories</span>
+    </div>
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-success);color:var(--color-text-success)">Order</span>
+      <span style="color:var(--color-text-secondary)"><code>status</code>, <code>total_amount</code>, <code>updated_at</code> — suivi cycle de vie commande</span>
+    </div>
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-success);color:var(--color-text-success)">OrderLine</span>
+      <span style="color:var(--color-text-secondary)"><code>unit_price</code> — snapshot du prix au moment de la commande</span>
+    </div>
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-warning);color:var(--color-text-warning)">Stock</span>
+      <span style="color:var(--color-text-secondary)"><code>min_threshold</code> — seuil d'alerte réapprovisionnement</span>
+    </div>
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-warning);color:var(--color-text-warning)">StockMvt</span>
+      <span style="color:var(--color-text-secondary)"><code>reference</code>, <code>note</code>, <code>created_at</code> — traçabilité complète des flux</span>
+    </div>
+    <div class="j-row">
+      <span class="j-badge" style="background:var(--color-background-danger);color:var(--color-text-danger)">Role</span>
+      <span style="color:var(--color-text-secondary)"><code>description</code> — documentation du rôle pour les admins</span>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '12px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+    primaryColor: dark ? '#1e2a3a' : '#e6f1fb',
+    primaryTextColor: dark ? '#c2c0b6' : '#3d3d3a',
+    primaryBorderColor: dark ? '#3a5070' : '#b5d4f4',
+  },
+});
+
+const diagram = `erDiagram
+  USER {
+    uuid id PK
+    string username
+    string email
+    string password_hash
+    boolean is_active
+    timestamp created_at
+  }
+  ROLE {
+    uuid id PK
+    string name
+    string description
+  }
+  USER_ROLE {
+    uuid user_id FK
+    uuid role_id FK
+  }
+  CATEGORY {
+    uuid id PK
+    string name
+    string slug
+    uuid parent_id FK
+  }
+  PRODUCT {
+    uuid id PK
+    string name
+    string description
+    decimal price
+    string sku
+    uuid category_id FK
+    boolean is_active
+  }
+  ORDER {
+    uuid id PK
+    uuid user_id FK
+    timestamp order_date
+    string status
+    decimal total_amount
+    timestamp updated_at
+  }
+  ORDER_LINE {
+    uuid id PK
+    uuid order_id FK
+    uuid product_id FK
+    int quantity
+    decimal unit_price
+  }
+  STOCK {
+    uuid id PK
+    uuid product_id FK
+    int quantity
+    int min_threshold
+  }
+  STOCK_MOVEMENT {
+    uuid id PK
+    uuid product_id FK
+    int quantity
+    string movement_type
+    string reference
+    string note
+    timestamp created_at
+  }
+
+  USER ||--o{ USER_ROLE : "a"
+  ROLE ||--o{ USER_ROLE : "attribué à"
+  USER ||--o{ ORDER : "passe"
+  ORDER ||--|{ ORDER_LINE : "contient"
+  PRODUCT ||--o{ ORDER_LINE : "apparaît dans"
+  CATEGORY ||--o{ PRODUCT : "regroupe"
+  CATEGORY ||--o{ CATEGORY : "parent de"
+  PRODUCT ||--|| STOCK : "dispose d'un"
+  PRODUCT ||--o{ STOCK_MOVEMENT : "tracé par"
+`;
+
+const { svg } = await mermaid.render('erd-svg', diagram);
+document.getElementById('erd').innerHTML = svg;
+
+document.querySelectorAll('#erd svg .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0], nums[2], nums[4], nums[6]];
+  const ys = [nums[1], nums[3], nums[5], nums[7]];
+  const x = Math.min(...xs), y = Math.min(...ys);
+  const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '8');
+  for (const a of ['fill','stroke','stroke-width','class','style']) {
+    if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+  }
+  firstPath.replaceWith(rect);
+});
+
+document.querySelectorAll('#erd svg .row-rect-odd path, #erd svg .row-rect-even path').forEach(p => {
+  p.setAttribute('stroke','none');
+});
+</script>

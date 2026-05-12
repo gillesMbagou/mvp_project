@@ -1,0 +1,366 @@
+###############################################################################
+#  CareSync — Docker Compose (développement local)
+#  Stack : Keycloak · PostgreSQL · Redis · Kafka · Vault · Elasticsearch
+#          + outils : pgAdmin · Kafka-UI · Swagger-UI · MailHog
+###############################################################################
+
+name: caresync
+
+# ─── Réseaux ─────────────────────────────────────────────────────────────────
+networks:
+  caresync-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+# ─── Volumes persistants ──────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+  keycloak-data:
+  redis-data:
+  kafka-data:
+  zookeeper-data:
+  zookeeper-log:
+  vault-data:
+  vault-logs:
+  elasticsearch-data:
+  pgadmin-data:
+
+###############################################################################
+#  SERVICES
+###############################################################################
+services:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  POSTGRESQL  (base de données principale — multi-schema/tenant)
+  # ───────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: caresync-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: caresync
+      POSTGRES_USER: caresync
+      POSTGRES_PASSWORD: caresync_secret
+      # Bases additionnelles créées au démarrage (Keycloak a sa propre DB)
+      POSTGRES_MULTIPLE_DATABASES: caresync,keycloak
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Script d'init : crée la DB keycloak + l'extension uuid-ossp
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U caresync -d caresync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  KEYCLOAK  (authentification OAuth2/OIDC — configuration du run fourni)
+  # ───────────────────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.1
+    container_name: caresync-keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      # ── Admin bootstrap (identique à ton docker run) ──
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # ── Base de données ──
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: caresync
+      KC_DB_PASSWORD: caresync_secret
+      # ── Réseau ──
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+      # ── Logging ──
+      KC_LOG_LEVEL: INFO
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # Realm CareSync pré-configuré (importé au démarrage)
+      - ./infra/keycloak/realms:/opt/keycloak/data/import:ro
+      - keycloak-data:/opt/keycloak/data
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.11
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  REDIS  (cache L2, sessions, rate-limiting)
+  # ───────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: caresync-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass redis_secret
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.12
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_secret", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  ZOOKEEPER  (requis par Kafka)
+  # ───────────────────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: caresync-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.13
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  KAFKA  (event streaming — alertes, IoT, audit)
+  # ───────────────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: caresync-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Topics CareSync pré-créés
+      KAFKA_CREATE_TOPICS: >
+        caresync.patient.events:3:1,
+        caresync.alerts:3:1,
+        caresync.iot.observations:6:1,
+        caresync.prescriptions:3:1,
+        caresync.notifications:3:1,
+        caresync.audit:3:1
+    ports:
+      - "127.0.0.1:9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.14
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  VAULT  (gestion des secrets, PKI, chiffrement)
+  # ───────────────────────────────────────────────────────────────────────────
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: caresync-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    command: vault server -config=/vault/config/vault.hcl
+    environment:
+      VAULT_ADDR: http://0.0.0.0:8200
+      VAULT_API_ADDR: http://0.0.0.0:8200
+      # Token root de dev — NE PAS utiliser en production
+      VAULT_DEV_ROOT_TOKEN_ID: caresync-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - vault-data:/vault/data
+      - vault-logs:/vault/logs
+      - ./infra/vault/config:/vault/config:ro
+      # Script d'init : active les engines KV, Transit, PKI, Database
+      - ./infra/vault/init:/vault/init:ro
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.15
+    healthcheck:
+      test: ["CMD-SHELL", "vault status -address=http://localhost:8200 || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  ELASTICSEARCH  (recherche full-text patients, indexation dossiers)
+  # ───────────────────────────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: caresync-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=caresync-cluster
+      - node.name=caresync-node-1
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.16
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 40s
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  MAILHOG  (serveur SMTP bouchon — test emails/notifications)
+  # ───────────────────────────────────────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: caresync-mailhog
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # UI web
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.17
+
+  ###############################################################################
+  #  OUTILS D'ADMINISTRATION (profil "tools" — optionnel)
+  ###############################################################################
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  PGADMIN  (interface graphique PostgreSQL)
+  # ───────────────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: caresync-pgadmin
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@caresync.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "127.0.0.1:5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./infra/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.18
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  KAFKA-UI  (interface graphique Kafka)
+  # ───────────────────────────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: caresync-kafka-ui
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: caresync-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "127.0.0.1:8090:8080"
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.19
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  SWAGGER-UI  (portail API CareSync — pointe vers les microservices)
+  # ───────────────────────────────────────────────────────────────────────────
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: caresync-swagger
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      SWAGGER_JSON_URL: http://localhost:8081/v3/api-docs   # patient-service
+      BASE_URL: /swagger
+      OAUTH2_REDIRECT_URL: http://localhost:8082/swagger/oauth2-redirect.html
+    ports:
+      - "127.0.0.1:8082:8080"
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.20
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  KIBANA  (visualisation Elasticsearch — optionnel)
+  # ───────────────────────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    container_name: caresync-kibana
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      XPACK_SECURITY_ENABLED: "false"
+    ports:
+      - "127.0.0.1:5601:5601"
+    networks:
+      caresync-net:
+        ipv4_address: 172.20.0.21
+    depends_on:
+      elasticsearch:
+        condition: service_healthy

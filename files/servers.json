@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "CareSync PostgreSQL",
+      "Group": "CareSync",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "caresync",
+      "Username": "caresync",
+      "SSLMode": "prefer",
+      "PassFile": "/pgpass"
+    }
+  }
+}
