@@ -1,0 +1,193 @@
+name: caresync
+
+networks:
+  caresync-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  keycloak-data:
+  kafka-data:
+#  zookeeper-data:
+#  zookeeper-log:
+  vault-data:
+  mosquitto-data:
+  mosquitto-log:
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: caresync-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: caresync
+      POSTGRES_PASSWORD: caresync_secret
+      POSTGRES_MULTIPLE_DATABASES: caresync,keycloak
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [caresync-net]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U caresync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  #  Keycloak
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.1
+    container_name: caresync-keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: caresync
+      KC_DB_PASSWORD: caresync_secret
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./infra/keycloak/realms:/opt/keycloak/data/import:ro
+      - keycloak-data:/opt/keycloak/data
+    networks: [caresync-net]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL","curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+
+#  # Zookeeper
+#  zookeeper:
+#    image: confluentinc/cp-zookeeper:7.6.1
+#    container_name: caresync-zookeeper
+#    restart: unless-stopped
+#    environment:
+#      ZOOKEEPER_CLIENT_PORT: 2181
+#      ZOOKEEPER_TICK_TIME: 2000
+#    volumes:
+#      - zookeeper-data:/var/lib/zookeeper/data
+#      - zookeeper-log:/var/lib/zookeeper/log
+#    networks: [caresync-net]
+#    healthcheck:
+#      test: ["CMD-SHELL","echo ruok | nc localhost 2181 | grep imok"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
+
+  #  Kafka
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: caresync-kafka
+    restart: unless-stopped
+    hostname: caresync-kafka
+    environment:
+      KAFKA_KRAFT_MODE: "true"  # Enables KRaft mode.
+      KAFKA_PROCESS_ROLES: controller,broker  # Kafka acts as both controller and broker.
+      KAFKA_NODE_ID: 1  # Unique ID for the Kafka instance.
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"  # Controller quorum.
+      KAFKA_LISTENERS: PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LOG_DIRS: /var/lib/kafka/data  # Log storage location.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"  # Enables automatic topic creation.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1  # Single replica for simplicity.
+      KAFKA_LOG_RETENTION_HOURS: 168  # Log retention period (7 days).
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0  # No rebalance delay.
+      CLUSTER_ID: "Mk3OEYBSD34fcwNTJENDM2Qk"  # Unique Kafka cluster ID.
+
+      # KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093"
+      KAFKA_CREATE_TOPICS: >
+        caresync.iot.observations:6:1,
+        caresync.alerts:3:1,
+        caresync.alerts.escalation:3:1,
+        caresync.notifications:3:1,
+        caresync.analytics.events:3:1
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - kafka-data:/var/lib/kafka/data
+    networks: [caresync-net]
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL","kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+
+  # MQTT Broker (Mosquitto)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: caresync-mosquitto
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1883:1883"   # MQTT
+      - "127.0.0.1:9001:9001"   # WebSocket
+    volumes:
+      - ./infra/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./infra/mosquitto/passwd:/mosquitto/config/passwd:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    networks: [caresync-net]
+    healthcheck:
+      test: ["CMD-SHELL","mosquitto_pub -h localhost -p 1883 -t health -m ping -u caresync -P mqtt_secret || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Vault
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: caresync-vault
+    restart: unless-stopped
+    cap_add: [IPC_LOCK]
+    command: vault server -config=/vault/config/vault.hcl
+    environment:
+      VAULT_ADDR: http://0.0.0.0:8200
+      VAULT_DEV_ROOT_TOKEN_ID: caresync-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - vault-data:/vault/data
+      - ./infra/vault/config:/vault/config:ro
+      - ./infra/vault/init:/vault/init:ro
+    networks: [caresync-net]
+    healthcheck:
+      test: ["CMD-SHELL","vault status -address=http://localhost:8200 || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  #  Kafka UI
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: caresync-kafka-ui
+    profiles: [tools]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: caresync
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "127.0.0.1:8090:8080"
+    networks: [caresync-net]
+    depends_on:
+      kafka:
+        condition: service_healthy
