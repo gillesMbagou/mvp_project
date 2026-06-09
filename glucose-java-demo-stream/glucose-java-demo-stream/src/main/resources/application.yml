@@ -1,0 +1,73 @@
+spring:
+  application:
+    name: caresync-glucose-reactive
+
+  datasource:
+    url: jdbc:h2:mem:caresync;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Keycloak realm CareSync — adapter le port si différent de 8180
+          issuer-uri: http://localhost:7080/realms/CareSync
+
+  kafka:
+    bootstrap-servers: localhost:29092
+    producer:
+      acks: "1"
+      retries: 3
+    consumer:
+      group-id: caresync-reactive-sse
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+
+  # WebFlux — Netty (pas Tomcat)
+  webflux:
+    base-path: /
+
+demo:
+  mqtt:
+    broker-url: tcp://localhost:1883
+  simulator:
+    interval-ms: 5000
+  libreview:
+    enabled: false
+    email: ""
+    password: ""
+    poll-interval-ms: 60000
+
+logging:
+  level:
+    be.caresync: INFO
+    reactor.kafka: WARN
+    org.apache.kafka: WARN
+    org.hibernate: WARN
+    # Activer pour déboguer le pipeline réactif
+    # reactor.core: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

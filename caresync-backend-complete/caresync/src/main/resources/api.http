@@ -1,0 +1,271 @@
+### ════════════════════════════════════════════════════════════════
+###  CareSync Backend — Tests HTTP complets
+###  Base URL : http://localhost:8081/api/v1
+###  Auth     : Keycloak http://localhost:8080/realms/caresync
+### ════════════════════════════════════════════════════════════════
+
+### ── 1. AUTHENTIFICATION ────────────────────────────────────────
+
+### Login — obtenir le token JWT Keycloak
+POST http://localhost:8080/realms/caresync/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=caresync-backend&client_secret=caresync-client-secret-dev&username=dr.dupont&password=Password1!&scope=openid
+
+> {%
+    if (response.status === 200) {
+        client.global.set("token", response.body.access_token);
+        console.log("✅ Token JWT obtenu");
+    } else {
+        console.log("❌ Auth failed", response.status);
+    }
+%}
+
+### ── 2. DISPOSITIFS IoT ─────────────────────────────────────────
+
+### Enregistrer un glucomètre
+POST http://localhost:8081/api/v1/iot/devices
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "patientId": "a0000001-0000-0000-0000-000000000001",
+  "deviceType": "GLUCOMETER",
+  "manufacturer": "Accu-Check",
+  "model": "Guide Plus",
+  "serialNumber": "GLU-001",
+  "protocol": "MQTT",
+  "firmwareVersion": "3.2.1"
+}
+
+> {%
+    if (response.status === 201) {
+        client.global.set("device_id", response.body.id);
+        console.log("✅ Dispositif enregistré:", response.body.id);
+    }
+%}
+
+###
+
+### Lister les dispositifs d'un patient
+GET http://localhost:8081/api/v1/iot/devices/patient/a0000001-0000-0000-0000-000000000001
+Authorization: Bearer {{token}}
+
+###
+
+### ── 3. OBSERVATIONS ─────────────────────────────────────────────
+
+### Saisie manuelle d'une observation (médecin)
+POST http://localhost:8081/api/v1/iot/observations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "patientId": "a0000001-0000-0000-0000-000000000001",
+  "deviceType": "GLUCOMETER",
+  "value": 1.15,
+  "unit": "g/L"
+}
+
+###
+
+### Saisie observation hors seuil → déclenche une alerte
+POST http://localhost:8081/api/v1/iot/observations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "patientId": "a0000001-0000-0000-0000-000000000001",
+  "deviceType": "GLUCOMETER",
+  "value": 3.8,
+  "unit": "g/L",
+  "note": "Post-repas, patient signale symptômes"
+}
+
+###
+
+### Saisie observation physiologiquement impossible → 400
+POST http://localhost:8081/api/v1/iot/observations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "patientId": "a0000001-0000-0000-0000-000000000001",
+  "deviceType": "GLUCOMETER",
+  "value": 42.0,
+  "unit": "g/L"
+}
+
+###
+
+### Historique des observations d'un patient
+GET http://localhost:8081/api/v1/iot/patients/a0000001-0000-0000-0000-000000000001/observations?page=0&size=20
+Authorization: Bearer {{token}}
+
+###
+
+### Dernière mesure glycémie
+GET http://localhost:8081/api/v1/iot/patients/a0000001-0000-0000-0000-000000000001/observations/latest/GLUCOMETER
+Authorization: Bearer {{token}}
+
+###
+
+### ── 4. SEUILS D'ALERTE ───────────────────────────────────────────
+
+### Configurer les seuils glycémie pour Jean Martin
+PUT http://localhost:8081/api/v1/patients/a0000001-0000-0000-0000-000000000001/thresholds
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "deviceType": "GLUCOMETER",
+  "criticalLow": 0.6,
+  "warningLow": 0.8,
+  "warningHigh": 2.5,
+  "criticalHigh": 4.0
+}
+
+###
+
+### Configurer seuils poids ICFe (Sophie Durand)
+PUT http://localhost:8081/api/v1/patients/a0000002-0000-0000-0000-000000000002/thresholds
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "deviceType": "SCALE",
+  "deltaThreshold48h": 2.0
+}
+
+###
+
+### Lister les seuils d'un patient
+GET http://localhost:8081/api/v1/patients/a0000001-0000-0000-0000-000000000001/thresholds
+Authorization: Bearer {{token}}
+
+###
+
+### ── 5. ALERTES CLINIQUES ─────────────────────────────────────────
+
+### Toutes les alertes actives
+GET http://localhost:8081/api/v1/alerts
+Authorization: Bearer {{token}}
+
+###
+
+### Alertes d'un patient spécifique
+GET http://localhost:8081/api/v1/alerts/patient/a0000001-0000-0000-0000-000000000001?page=0&size=10
+Authorization: Bearer {{token}}
+
+> {%
+    if (response.status === 200 && response.body.content?.length > 0) {
+        client.global.set("alert_id", response.body.content[0].id);
+        console.log("Alert ID:", response.body.content[0].id);
+    }
+%}
+
+###
+
+### Détail d'une alerte
+GET http://localhost:8081/api/v1/alerts/{{alert_id}}
+Authorization: Bearer {{token}}
+
+###
+
+### Acquitter une alerte (médecin ou infirmier)
+POST http://localhost:8081/api/v1/alerts/{{alert_id}}/acknowledge
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "comment": "Patient contacté — Actonel ajusté, contrôle J+1 programmé"
+}
+
+###
+
+### Résoudre une alerte (médecin uniquement)
+POST http://localhost:8081/api/v1/alerts/{{alert_id}}/resolve?note=Valeurs+revenues+à+la+normale
+Authorization: Bearer {{token}}
+
+###
+
+### ── 6. SIMULATEUR IoT (profil demo/dev uniquement) ──────────────
+
+### Déclencher scénario hypoglycémie
+POST http://localhost:8081/api/v1/sim/scenario/HYPOGLYCEMIE
+Authorization: Bearer {{token}}
+
+###
+
+### Déclencher chute SpO2
+POST http://localhost:8081/api/v1/sim/scenario/CHUTE_SPO2
+Authorization: Bearer {{token}}
+
+###
+
+### Déclencher rétention hydrique ICFe
+POST http://localhost:8081/api/v1/sim/scenario/RETENTION_HYDRIQUE
+Authorization: Bearer {{token}}
+
+###
+
+### Retour normal
+POST http://localhost:8081/api/v1/sim/scenario/NORMAL
+Authorization: Bearer {{token}}
+
+###
+
+### Scénario actif
+GET http://localhost:8081/api/v1/sim/scenario
+Authorization: Bearer {{token}}
+
+###
+
+### ── 7. ANALYTICS ─────────────────────────────────────────────────
+
+### Dashboard opérationnel temps réel
+GET http://localhost:8081/api/v1/analytics/dashboard/operational
+Authorization: Bearer {{token}}
+
+###
+
+### Dashboard tactique 7 jours — Jean Martin
+GET http://localhost:8081/api/v1/analytics/dashboard/tactical/a0000001-0000-0000-0000-000000000001
+Authorization: Bearer {{token}}
+
+###
+
+### Dashboard stratégique 30 jours
+GET http://localhost:8081/api/v1/analytics/dashboard/strategic
+Authorization: Bearer {{token}}
+
+###
+
+### Série temporelle glycémie — 24h
+GET http://localhost:8081/api/v1/analytics/timeseries/a0000001-0000-0000-0000-000000000001/GLUCOMETER?lastHours=24
+Authorization: Bearer {{token}}
+
+###
+
+### Série temporelle SpO2 — 48h
+GET http://localhost:8081/api/v1/analytics/timeseries/a0000002-0000-0000-0000-000000000002/PULSE_OXIMETER?lastHours=48
+Authorization: Bearer {{token}}
+
+###
+
+### ── 8. CAS D'ERREUR ─────────────────────────────────────────────
+
+### Alerte inexistante → 404
+GET http://localhost:8081/api/v1/alerts/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+###
+
+### Sans token → 401
+GET http://localhost:8081/api/v1/alerts
+
+###
+
+### Infirmier tente de résoudre → 403
+POST http://localhost:8081/api/v1/alerts/{{alert_id}}/resolve
+Authorization: Bearer {{token_infirmier}}

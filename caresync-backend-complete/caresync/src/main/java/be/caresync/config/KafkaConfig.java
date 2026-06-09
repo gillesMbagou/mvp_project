@@ -46,9 +46,7 @@ public class KafkaConfig {
         return new DefaultKafkaConsumerFactory<>(Map.of(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
             ConsumerConfig.GROUP_ID_CONFIG,          "caresync-backend",
-            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
-            ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,   StringDeserializer.class,
-            ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest"
         ), new StringDeserializer(), deserializer);
     }
 
