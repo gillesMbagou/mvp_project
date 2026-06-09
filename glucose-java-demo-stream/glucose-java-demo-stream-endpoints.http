@@ -1,0 +1,210 @@
+### =============================================================
+###  CareSync – glucose-java-demo-stream  |  Endpoints HTTP
+###  Keycloak : realm=caresync  client=caresync-swagger
+###  Serveur  : http://localhost:8080
+###  Keycloak : http://localhost:7080
+### =============================================================
+
+# ─── Variables globales ─────────────────────────────────────────
+@baseUrl      = http://localhost:8080
+@keycloakUrl  = http://localhost:7080
+@realm        = CareSync
+@clientId     = caresync-swagger
+@username     = s.cappuyns@mmrempart.be
+@password     = scappuysrempart7850
+@tokenUrl     = {{keycloakUrl}}/realms/{{realm}}/protocol/openid-connect/token
+
+# ─── [0] AUTHENTIFICATION – Obtenir un access token ─────────────
+# Exécuter cette requête en premier, puis copier le token dans @bearerToken
+# (IntelliJ IDEA : clic-droit → "Copy Response Body" ou utiliser les tests JS ci-dessous)
+
+### Obtenir un token Keycloak (Resource Owner Password Grant)
+# @name login
+POST {{tokenUrl}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{clientId}}&username={{username}}&password={{password}}&acr_values=gold
+
+> {%
+    client.global.set("bearerToken", response.body.access_token);
+    client.global.set("refreshToken", response.body.refresh_token);
+    client.log("✅ Token obtenu – expire dans " + response.body.expires_in + "s");
+%}
+
+###
+
+### Rafraîchir le token (évite de ré-authentifier)
+# @name refresh
+POST {{tokenUrl}}
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token&client_id={{clientId}}&refresh_token={{refreshToken}}
+
+> {%
+    client.global.set("bearerToken", response.body.access_token);
+    client.global.set("refreshToken", response.body.refresh_token);
+    client.log("✅ Token rafraîchi – expire dans " + response.body.expires_in + "s");
+%}
+
+
+###
+### =============================================================
+###  ENDPOINT PUBLIC
+### =============================================================
+
+### [ACT-1] Health check (public – pas de token requis)
+GET {{baseUrl}}/actuator/health
+
+
+###
+### =============================================================
+###  DASHBOARD – /api  (tout utilisateur authentifié)
+### =============================================================
+
+### [D-1] Liste de tous les patients
+GET {{baseUrl}}/api/patients
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-2] Observations paginées d'un patient  (page 0, 50 éléments)
+# Remplacer :patientId par un identifiant réel retourné par [D-1]
+@patientId = PAT-001
+GET {{baseUrl}}/api/patients/{{patientId}}/observations?page=0&size=50
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-2b] Observations – page suivante
+GET {{baseUrl}}/api/patients/{{patientId}}/observations?page=1&size=50
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-3] Timeseries d'observations par device (24 dernières heures)
+# deviceType : GLUCOSE_MONITOR | HEART_RATE | BLOOD_PRESSURE | SPO2 | TEMPERATURE (adapter selon le projet)
+@deviceType = GLUCOSE_MONITOR
+GET {{baseUrl}}/api/patients/{{patientId}}/observations/timeseries?deviceType={{deviceType}}&hours=24
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-3b] Timeseries – dernières 6 heures
+GET {{baseUrl}}/api/patients/{{patientId}}/observations/timeseries?deviceType={{deviceType}}&hours=6
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-4] Alertes des dernières 24 heures (tous patients)
+GET {{baseUrl}}/api/observations/alerts?hours=24
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-4b] Alertes des dernières 48 heures
+GET {{baseUrl}}/api/observations/alerts?hours=48
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-5] Statistiques globales du tableau de bord
+# Retourne : totalObservations, totalPatients, totalDevices, alertsLast24h, criticalAlerts24h
+GET {{baseUrl}}/api/stats
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-6] Liste de tous les devices simulés
+GET {{baseUrl}}/api/devices
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-7] Changer le scénario d'un device
+# serial  : numéro de série retourné par [D-6]
+# scenario : NORMAL | HYPOGLYCEMIA | HYPERGLYCEMIA | CRITICAL (adapter selon DeviceScenario enum)
+@deviceSerial = DEV-GLU-001
+@scenario     = HYPOGLYCEMIA
+POST {{baseUrl}}/api/devices/{{deviceSerial}}/scenario/{{scenario}}
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-7b] Revenir au scénario NORMAL
+POST {{baseUrl}}/api/devices/{{deviceSerial}}/scenario/NORMAL
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+###
+
+### [D-7c] Scénario critique
+POST {{baseUrl}}/api/devices/{{deviceSerial}}/scenario/CRITICAL
+Authorization: Bearer {{bearerToken}}
+Accept: application/json
+
+
+###
+### =============================================================
+###  STREAMING SSE – /api/health-professional/stream
+###  Rôle requis : HEALTH_PROFESSIONAL | MEDECIN | INFIRMIERE | ADMIN
+###  Note : les SSE sont des flux long-lived (ne pas attendre une réponse complète)
+### =============================================================
+
+### [S-1] Stream d'observations en temps réel (tous les devices)
+GET {{baseUrl}}/api/health-professional/stream/observations
+Authorization: Bearer {{bearerToken}}
+Accept: text/event-stream
+
+###
+
+### [S-1b] Stream d'observations – filtrer par serial de device
+GET {{baseUrl}}/api/health-professional/stream/observations?serial={{deviceSerial}}
+Authorization: Bearer {{bearerToken}}
+Accept: text/event-stream
+
+###
+
+### [S-1c] Stream d'observations – filtrer par patient
+GET {{baseUrl}}/api/health-professional/stream/observations?patientId={{patientId}}
+Authorization: Bearer {{bearerToken}}
+Accept: text/event-stream
+
+###
+
+### [S-2] Stream d'alertes (CRITIQUE et URGENTE uniquement)
+GET {{baseUrl}}/api/health-professional/stream/alerts
+Authorization: Bearer {{bearerToken}}
+Accept: text/event-stream
+
+###
+
+### [S-3] Stream de statistiques (mise à jour toutes les 30 secondes)
+# Retourne : totalObservations, totalPatients, totalDevices, alertsLast24h, criticalAlerts24h, timestamp
+GET {{baseUrl}}/api/health-professional/stream/stats
+Authorization: Bearer {{bearerToken}}
+Accept: text/event-stream
+
+###
+
+### [S-4] Heartbeat SSE (keep-alive toutes les 25 secondes)
+GET {{baseUrl}}/api/health-professional/stream/heartbeat
+Authorization: Bearer {{bearerToken}}
+Accept: text/event-stream
+
+###
+### =============================================================
+###  CONSOLE H2 (accès direct navigateur uniquement)
+###  URL : http://localhost:8080/h2-console
+###  JDBC URL : jdbc:h2:mem:caresync
+###  User : sa  |  Password : (vide)
+### =============================================================

@@ -21,6 +21,12 @@ spring:
       enabled: true
       path: /h2-console
 
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2s
+
   security:
     oauth2:
       resourceserver:

@@ -3,12 +3,15 @@ package be.caresync.demo.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.integration.config.EnableIntegration;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.serializer.JsonSerializer;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -44,5 +47,25 @@ public class AppConfig {
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
+    }
+
+    // ── Consumer factory dédié au notification-service (valeurs en String brut) ──
+
+    @Bean
+    public ConsumerFactory<String, String> notificationConsumerFactory() {
+        return new DefaultKafkaConsumerFactory<>(Map.of(
+            ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,      bootstrapServers,
+            ConsumerConfig.GROUP_ID_CONFIG,               "notification-service",
+            ConsumerConfig.AUTO_OFFSET_RESET_CONFIG,      "latest",
+            ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,   StringDeserializer.class,
+            ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class
+        ));
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, String> notificationListenerContainerFactory() {
+        var factory = new ConcurrentKafkaListenerContainerFactory<String, String>();
+        factory.setConsumerFactory(notificationConsumerFactory());
+        return factory;
     }
 }
