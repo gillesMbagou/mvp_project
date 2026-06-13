@@ -1,7 +1,7 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.rgpd.AuditLog;
-import be.caresync.demo.repository.AuditLogRepository;
+import be.caresync.demo.repository.jpa.AuditLogRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

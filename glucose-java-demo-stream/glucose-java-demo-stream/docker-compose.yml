@@ -1,0 +1,310 @@
+name: caresync
+
+# ── Réseaux ───────────────────────────────────────────────────────────────────
+networks:
+  caresync-net:
+    driver: bridge
+
+# ── Volumes persistants ───────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  mosquitto-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+services:
+
+  # ╔═══════════════════════════════════════════════╗
+  # ║              INFRASTRUCTURE                   ║
+  # ╚═══════════════════════════════════════════════╝
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: caresync-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: caresync_db
+      POSTGRES_USER: caresync
+      POSTGRES_PASSWORD: caresync_secret
+    ports:
+      - "5438:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U caresync -d caresync_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    container_name: caresync-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: bitnami/kafka:3.9
+    container_name: caresync-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_CFG_NUM_PARTITIONS: 3
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_CFG_LOG_RETENTION_HOURS: 48
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka-data:/bitnami/kafka
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: caresync-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h 127.0.0.1 -p 1883 -t caresync/healthcheck -m ping -q 0 2>/dev/null && echo ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: caresync-keycloak
+    restart: unless-stopped
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_secret
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_LOG_LEVEL: WARN
+    ports:
+      - "7080:8080"
+    command: start-dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - caresync-net
+
+  # ╔═══════════════════════════════════════════════╗
+  # ║           OBSERVABILITÉ (OTel Stack)          ║
+  # ╚═══════════════════════════════════════════════╝
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    container_name: caresync-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: memory
+    ports:
+      - "16686:16686"   # UI Jaeger
+      - "14250:14250"   # gRPC collector
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:14269/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  loki:
+    image: grafana/loki:3.3.0
+    container_name: caresync-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ready | grep -q ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    container_name: caresync-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"     # gRPC OTLP (traces, métriques, logs)
+      - "4318:4318"     # HTTP OTLP
+      - "8889:8889"     # Endpoint Prometheus (scrape par Prometheus)
+      - "13133:13133"   # health_check
+    depends_on:
+      jaeger:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:13133 | grep -q '\"status\":\"Server available\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: caresync-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy | grep -q Healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  promtail:
+    image: grafana/promtail:3.3.0
+    container_name: caresync-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/config.yaml
+    volumes:
+      - ./promtail/promtail-config.yaml:/etc/promtail/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - caresync-net
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: caresync-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor tempoSearch
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q ok || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+
+  # ╔═══════════════════════════════════════════════╗
+  # ║               APPLICATION                     ║
+  # ╚═══════════════════════════════════════════════╝
+
+  caresync-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: caresync-app
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/caresync_db
+      SPRING_DATASOURCE_USERNAME: caresync
+      SPRING_DATASOURCE_PASSWORD: caresync_secret
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      DEMO_MQTT_BROKER_URL: tcp://mosquitto:1883
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/CareSync
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      ENVIRONMENT: docker
+      OTEL_SAMPLING_PROBABILITY: "1.0"
+    ports:
+      - "8080:8080"
+      - "8081:8081"   # Actuator / Prometheus
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    networks:
+      - caresync-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/actuator/health/liveness | grep -q UP || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s

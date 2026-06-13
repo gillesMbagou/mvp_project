@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+  <!-- ── Profil docker / prod : JSON structuré pour Loki / ELK ───── -->
+  <springProfile name="docker,prod,staging">
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <includeCallerData>false</includeCallerData>
+        <customFields>{"service":"caresync-glucose-reactive"}</customFields>
+        <fieldNames>
+          <timestamp>@timestamp</timestamp>
+          <message>message</message>
+          <logger>logger</logger>
+          <thread>thread</thread>
+          <level>level</level>
+        </fieldNames>
+        <!-- Inclut traceId/spanId injectés par Micrometer Tracing -->
+        <includeMdcKeyName>traceId</includeMdcKeyName>
+        <includeMdcKeyName>spanId</includeMdcKeyName>
+        <includeMdcKeyName>patientId</includeMdcKeyName>
+        <includeMdcKeyName>deviceSerial</includeMdcKeyName>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+
+    <logger name="be.caresync" level="INFO"/>
+    <logger name="org.springframework.kafka" level="WARN"/>
+    <logger name="reactor.kafka" level="WARN"/>
+    <logger name="org.hibernate" level="WARN"/>
+  </springProfile>
+
+  <!-- ── Profil local : sortie colorée avec traceId ───────────────── -->
+  <springProfile name="local,default">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%cyan(%X{traceId:--})] %cyan(%-40.40logger{39}) : %msg%n</pattern>
+        <charset>UTF-8</charset>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="be.caresync" level="DEBUG"/>
+    <logger name="org.springframework.kafka" level="WARN"/>
+    <logger name="reactor.kafka" level="WARN"/>
+    <logger name="org.hibernate" level="WARN"/>
+  </springProfile>
+
+</configuration>

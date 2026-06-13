@@ -4,9 +4,9 @@ import be.caresync.demo.model.GlucoseObservation;
 import be.caresync.demo.model.db.ObservationRecord;
 import be.caresync.demo.model.db.PatientProfile;
 import be.caresync.demo.model.db.SimulatedDevice;
-import be.caresync.demo.repository.DeviceRepository;
-import be.caresync.demo.repository.ObservationRepository;
-import be.caresync.demo.repository.PatientRepository;
+import be.caresync.demo.repository.jpa.DeviceRepository;
+import be.caresync.demo.repository.jpa.ObservationRepository;
+import be.caresync.demo.repository.jpa.PatientRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +40,6 @@ public class MultiPatientSimulator {
 
     private final PatientRepository     patientRepo;   // retourne PatientProfile
     private final DeviceRepository      deviceRepo;
-    private final ObservationRepository obsRepo;
     private final ObjectMapper          objectMapper;
 
     @Value("${demo.mqtt.broker-url:tcp://localhost:1883}")
@@ -96,7 +95,6 @@ public class MultiPatientSimulator {
                     .source("REALTIME_SIMULATOR")
                     .observedAt(now)
                     .build();
-            obsRepo.save(rec);
 
             publishMqtt(dev, profile, rec, now);
         }

@@ -1,7 +1,7 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.patient.Consultation;
-import be.caresync.demo.repository.ConsultationRepository;
+import be.caresync.demo.repository.jpa.ConsultationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

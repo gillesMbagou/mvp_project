@@ -1,7 +1,10 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.messaging.*;
-import be.caresync.demo.repository.*;
+import be.caresync.demo.repository.jpa.MessageReadReceiptRepository;
+import be.caresync.demo.repository.jpa.MessageThreadRepository;
+import be.caresync.demo.repository.jpa.SecureMessageRepository;
+import be.caresync.demo.repository.jpa.ThreadParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

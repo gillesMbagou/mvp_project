@@ -1,7 +1,7 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.rgpd.PatientConsent;
-import be.caresync.demo.repository.PatientConsentRepository;
+import be.caresync.demo.repository.jpa.PatientConsentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

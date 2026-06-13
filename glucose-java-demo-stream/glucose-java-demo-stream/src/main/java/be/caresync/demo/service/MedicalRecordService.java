@@ -1,7 +1,10 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.patient.*;
-import be.caresync.demo.repository.*;
+import be.caresync.demo.repository.jpa.AllergyRepository;
+import be.caresync.demo.repository.jpa.ContraindicationRepository;
+import be.caresync.demo.repository.jpa.MedicalHistoryRepository;
+import be.caresync.demo.repository.jpa.MedicationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

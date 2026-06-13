@@ -8,7 +8,7 @@ import be.caresync.demo.model.db.patient.Patient;
 import be.caresync.demo.model.db.staff.Infirmiere;
 import be.caresync.demo.model.db.staff.Medecin;
 import be.caresync.demo.model.db.staff.UserRole;
-import be.caresync.demo.repository.*;
+import be.caresync.demo.repository.jpa.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -38,11 +38,11 @@ import java.util.*;
 public class DataSeeder implements CommandLineRunner {
 
     private final PatientRepository          patientRepo;         // gère PatientProfile
-    private final ClinicalContextRepository  clinicalContextRepo;
-    private final DeviceRepository           deviceRepo;
-    private final ObservationRepository      obsRepo;
-    private final MedecinRepository          medecinRepo;
-    private final InfirmiereRepository       infirmiereRepo;
+    private final ClinicalContextRepository clinicalContextRepo;
+    private final DeviceRepository deviceRepo;
+    private final ObservationRepository obsRepo;
+    private final MedecinRepository medecinRepo;
+    private final InfirmiereRepository infirmiereRepo;
 
     private final Random rng = new Random(42);
 

@@ -1,7 +1,8 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.prescription.*;
-import be.caresync.demo.repository.*;
+import be.caresync.demo.repository.jpa.PrescriptionLineRepository;
+import be.caresync.demo.repository.jpa.PrescriptionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,7 +46,7 @@ public class PrescriptionService {
             return lineRepo.save(line);
         }).toList();
 
-        interactionService.checkAndFlagInteractions(savedLines);
+        interactionService.checkAndFlagInteractions(saved.getPatientId(), savedLines);
 
         auditService.log("CREATE_PRESCRIPTION", "Prescription", String.valueOf(saved.getId()),
                 saved.getPatientId(), saved.getPrescribingDoctorName(), null);

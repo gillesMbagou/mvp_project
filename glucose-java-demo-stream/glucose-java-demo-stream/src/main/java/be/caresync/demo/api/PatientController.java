@@ -4,7 +4,7 @@ import be.caresync.demo.model.db.PatientProfile;
 import be.caresync.demo.model.db.patient.Allergy;
 import be.caresync.demo.model.db.patient.Medication;
 import be.caresync.demo.model.db.patient.MedicalHistory;
-import be.caresync.demo.repository.PatientRepository;
+import be.caresync.demo.repository.jpa.PatientRepository;
 import be.caresync.demo.service.MedicalRecordService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

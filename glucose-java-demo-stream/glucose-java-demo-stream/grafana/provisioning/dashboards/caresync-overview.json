@@ -1,0 +1,174 @@
+{
+  "title": "CareSync — Vue d'ensemble",
+  "uid": "caresync-overview",
+  "tags": ["caresync", "glucose", "iot"],
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "type": "constant",
+        "current": { "value": "docker" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Observations / seconde",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [{
+        "expr": "rate(caresync_kafka_consumer_records_consumed_total[1m])",
+        "legendFormat": "obs/s"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 5 },
+            { "color": "red", "value": 20 }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Alertes actives",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [{
+        "expr": "sum(caresync_glucose_alerts_total) or vector(0)",
+        "legendFormat": "alertes"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 1 },
+            { "color": "red", "value": 5 }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "JVM Heap utilisé",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [{
+        "expr": "sum(jvm_memory_used_bytes{area=\"heap\",job=\"caresync-app\"})",
+        "legendFormat": "heap"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 536870912 },
+            { "color": "red", "value": 805306368 }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Latence HTTP p99 (ms)",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"caresync-app\"}[5m])) by (le)) * 1000",
+        "legendFormat": "p99"
+      }],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "color": { "mode": "thresholds" },
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 200 },
+            { "color": "red", "value": 1000 }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Flux d'observations temps réel",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(caresync_kafka_consumer_records_consumed_total[1m])",
+          "legendFormat": "observations/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "fixedColor": "#3b82f6", "mode": "fixed" } }
+      },
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6,
+      "title": "Latence HTTP par endpoint",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{job=\"caresync-app\"}[5m])) by (le, uri)) * 1000",
+          "legendFormat": "p50 {{uri}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{job=\"caresync-app\"}[5m])) by (le, uri)) * 1000",
+          "legendFormat": "p99 {{uri}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" }
+      }
+    },
+    {
+      "id": 7,
+      "title": "JVM — Mémoire (Heap)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\",job=\"caresync-app\"}",
+          "legendFormat": "heap utilisé"
+        },
+        {
+          "expr": "jvm_memory_max_bytes{area=\"heap\",job=\"caresync-app\"}",
+          "legendFormat": "heap max"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Logs applicatifs",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 10 },
+      "datasource": { "uid": "loki" },
+      "targets": [{
+        "expr": "{service=\"caresync-glucose-reactive\"}",
+        "legendFormat": ""
+      }],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true
+      }
+    }
+  ]
+}

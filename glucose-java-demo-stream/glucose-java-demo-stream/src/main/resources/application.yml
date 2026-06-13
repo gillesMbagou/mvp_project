@@ -2,78 +2,152 @@ spring:
   application:
     name: caresync-glucose-reactive
 
+  # ── Arrêt propre ──────────────────────────────────────────────
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  # ── Base de données ───────────────────────────────────────────
   datasource:
-    url: jdbc:h2:mem:caresync;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5438/caresync_db}
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:caresync}
+    password: ${SPRING_DATASOURCE_PASSWORD:caresync_secret}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: 2
+      connection-timeout: 30000
+      pool-name: CareSync-HikariPool
 
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: ${JPA_DDL_AUTO:update}
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc.batch_size: 50
+        order_inserts: true
 
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-
+  # ── Redis ──────────────────────────────────────────────────────
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
       timeout: 2s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          # Keycloak realm CareSync — adapter le port si différent de 8180
-          issuer-uri: http://localhost:7080/realms/CareSync
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300s
+      use-key-prefix: true
+      cache-null-values: false
 
+  # ── Kafka ─────────────────────────────────────────────────────
   kafka:
-    bootstrap-servers: localhost:29092
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
     producer:
       acks: "1"
       retries: 3
+      batch-size: 16384
+      linger-ms: 5
     consumer:
       group-id: caresync-reactive-sse
       auto-offset-reset: latest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
+        spring.json.value.default.type: java.lang.String
         spring.json.trusted.packages: "*"
 
+  # ── Sécurité OAuth2 (Keycloak) ────────────────────────────────
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:7080/realms/CareSync}
 
-  # WebFlux — Netty (pas Tomcat)
+  # ── WebFlux ───────────────────────────────────────────────────
   webflux:
     base-path: /
 
+# ── Application CareSync ──────────────────────────────────────
 demo:
   mqtt:
-    broker-url: tcp://localhost:1883
+    broker-url: ${DEMO_MQTT_BROKER_URL:tcp://localhost:1883}
   simulator:
-    interval-ms: 5000
+    interval-ms: ${DEMO_SIMULATOR_INTERVAL_MS:5000}
   libreview:
     enabled: false
-    email: ""
-    password: ""
     poll-interval-ms: 60000
 
+# ── Logging structuré ────────────────────────────────────────
 logging:
   level:
     be.caresync: INFO
     reactor.kafka: WARN
     org.apache.kafka: WARN
     org.hibernate: WARN
-    # Activer pour déboguer le pipeline réactif
-    # reactor.core: DEBUG
+  pattern:
+    correlation: "[${spring.application.name},%X{traceId:-},%X{spanId:-}]"
 
+# ── Actuator & Observabilité ─────────────────────────────────
 management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:8081}
+
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics,env,loggers,threaddump,heapdump
+
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: db,redis,kafka
+        liveness:
+          include: ping
+
+  # ── Tracing distribué (Micrometer → OTel Collector) ──────────
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}
+
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/metrics
+        step: 30s
+
+  # ── Métriques custom ─────────────────────────────────────────
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        spring.kafka.listener: true
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:local}
+
+# ── OpenAPI / Swagger ────────────────────────────────────────
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    operationsSorter: method

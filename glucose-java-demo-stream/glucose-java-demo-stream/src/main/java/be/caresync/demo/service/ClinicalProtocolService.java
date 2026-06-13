@@ -1,7 +1,7 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.careplan.ClinicalProtocol;
-import be.caresync.demo.repository.ClinicalProtocolRepository;
+import be.caresync.demo.repository.jpa.ClinicalProtocolRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,7 +1,7 @@
 package be.caresync.demo.service;
 
 import be.caresync.demo.model.db.patient.Vaccination;
-import be.caresync.demo.repository.VaccinationRepository;
+import be.caresync.demo.repository.jpa.VaccinationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

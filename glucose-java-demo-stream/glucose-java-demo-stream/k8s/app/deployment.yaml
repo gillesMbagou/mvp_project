@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caresync-glucose-reactive
+  namespace: caresync
+  labels:
+    app: caresync-glucose-reactive
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: caresync-glucose-reactive
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0      # Zéro downtime
+
+  template:
+    metadata:
+      labels:
+        app: caresync-glucose-reactive
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/actuator/prometheus"
+
+    spec:
+      terminationGracePeriodSeconds: 60
+
+      # Sécurité Pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: caresync-app
+          image: caresync/glucose-reactive:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: actuator
+              containerPort: 8081
+              protocol: TCP
+
+          # Sécurité conteneur
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+          # Variables d'environnement (ConfigMap + Secret)
+          envFrom:
+            - configMapRef:
+                name: caresync-config
+            - secretRef:
+                name: caresync-secret
+
+          # Ressources (ajuster selon charge réelle)
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+
+          # ── Sondes ────────────────────────────────────────────────
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: actuator
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12    # 2 minutes max au démarrage
+
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: actuator
+            initialDelaySeconds: 0
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: actuator
+            initialDelaySeconds: 0
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Répertoires en mémoire nécessaires pour un FS en lecture seule
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      # Répartit les pods sur différents nœuds
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: caresync-glucose-reactive

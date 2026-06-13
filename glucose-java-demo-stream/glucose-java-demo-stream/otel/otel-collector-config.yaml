@@ -1,0 +1,113 @@
+# OpenTelemetry Collector — Configuration CareSync
+# Reçoit traces + métriques + logs via OTLP (gRPC & HTTP)
+# Exporte : traces → Jaeger | métriques → Prometheus | logs → Loki
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins:
+            - "http://localhost:*"
+
+  # Métriques propres au collector (auto-observabilité)
+  prometheus/self:
+    config:
+      scrape_configs:
+        - job_name: otel-collector
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["localhost:8888"]
+
+processors:
+  # Limite mémoire — rejette si > 80 % du seuil
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # Regroupe les données avant export (réduit les appels réseau)
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  # Enrichit avec des attributs de ressource communs
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: ${env:ENVIRONMENT:-local}
+        action: upsert
+      - key: service.namespace
+        value: caresync
+        action: upsert
+
+exporters:
+  # ── Traces → Jaeger (OTLP gRPC natif) ──────────────────────────
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # ── Métriques → endpoint Prometheus (mode pull) ─────────────────
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: caresync
+    resource_to_telemetry_conversion:
+      enabled: true
+    enable_open_metrics: true
+
+  # ── Logs → Loki ─────────────────────────────────────────────────
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+    labels:
+      resource:
+        service.name: service_name
+        deployment.environment: environment
+      attributes:
+        level: level
+
+  # ── Debug (désactiver en prod) ──────────────────────────────────
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 100
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  memory_ballast:
+    size_mib: 64
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+service:
+  extensions: [health_check, memory_ballast, pprof]
+
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters:  [otlp/jaeger]
+
+    metrics:
+      receivers:  [otlp, prometheus/self]
+      processors: [memory_limiter, resource, batch]
+      exporters:  [prometheus]
+
+    logs:
+      receivers:  [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters:  [loki]
+
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      address: 0.0.0.0:8888

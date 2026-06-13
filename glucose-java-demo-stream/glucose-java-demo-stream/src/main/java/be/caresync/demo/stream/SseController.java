@@ -2,8 +2,8 @@ package be.caresync.demo.stream;
 
 import be.caresync.demo.model.GlucoseObservation;
 import be.caresync.demo.model.db.ObservationRecord;
-import be.caresync.demo.repository.ObservationRepository;
-import be.caresync.demo.repository.PatientRepository;
+import be.caresync.demo.repository.jpa.ObservationRepository;
+import be.caresync.demo.repository.jpa.PatientRepository;
 import be.caresync.demo.simulator.MultiPatientSimulator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

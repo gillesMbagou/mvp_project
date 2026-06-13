@@ -19,17 +19,17 @@ import java.util.stream.Collectors;
 
 /**
  * Sécurité WebFlux — OAuth2 Resource Server Keycloak.
- *
+ * <p>
  * Rôles Keycloak (realm CareSync) :
- *   ADMIN                  → accès total
- *   MEDECIN                → professionnel de santé + accès dashboard
- *   INFIRMIERE             → professionnel de santé + accès dashboard
- *   ROLE_HEALTH_PROFESSIONAL → déjà préfixé dans Keycloak, normalisé ci-dessous
- *
+ * ADMIN                  → accès total
+ * MEDECIN                → professionnel de santé + accès dashboard
+ * INFIRMIERE             → professionnel de santé + accès dashboard
+ * ROLE_HEALTH_PROFESSIONAL → déjà préfixé dans Keycloak, normalisé ci-dessous
+ * <p>
  * Normalisation des rôles :
- *   Keycloak peut envoyer "ROLE_HEALTH_PROFESSIONAL" (avec préfixe) ou "MEDECIN" (sans).
- *   Le converter normalise tout en ROLE_<NOM> pour que hasRole() fonctionne uniformément.
- *
+ * Keycloak peut envoyer "ROLE_HEALTH_PROFESSIONAL" (avec préfixe) ou "MEDECIN" (sans).
+ * Le converter normalise tout en ROLE_<NOM> pour que hasRole() fonctionne uniformément.
+ * <p>
  * MFA (acr = "gold") exigé pour le rôle HEALTH_PROFESSIONAL.
  */
 @Configuration
@@ -39,36 +39,37 @@ public class SecurityConfig {
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
         return http
-            .csrf(ServerHttpSecurity.CsrfSpec::disable)
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .authorizeExchange(auth -> auth
-                // Endpoints publics
-                .pathMatchers("/actuator/health").permitAll()
-                .pathMatchers("/h2-console/**").permitAll()
-                // Routes professionnels de santé : MEDECIN, INFIRMIERE ou HEALTH_PROFESSIONAL
-                // Un ADMIN a accès à tout (ADMIN > anyAuthenticated)
-                .pathMatchers("/api/health-professional/**")
-                    .hasAnyRole("HEALTH_PROFESSIONAL", "MEDECIN", "INFIRMIERE", "ADMIN")
-                // Reste de l'API : tout utilisateur authentifié
-                .pathMatchers("/api/**").authenticated()
-                .anyExchange().denyAll()
-            )
-            .oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtConverter()))
-            )
-            .build();
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .authorizeExchange(auth -> auth
+                        // Endpoints publics
+                        .pathMatchers("/api/v1/public/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                        .pathMatchers("/actuator/health").permitAll()
+                        .pathMatchers("/h2-console/**").permitAll()
+                        // Routes professionnels de santé : MEDECIN, INFIRMIERE ou HEALTH_PROFESSIONAL
+                        // Un ADMIN a accès à tout (ADMIN > anyAuthenticated)
+                        .pathMatchers("/api/health-professional/**")
+                        .hasAnyRole("HEALTH_PROFESSIONAL", "MEDECIN", "INFIRMIERE", "ADMIN")
+                        // Reste de l'API : tout utilisateur authentifié
+                        .pathMatchers("/api/**").authenticated()
+                        .anyExchange().denyAll()
+                )
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtConverter()))
+                )
+                .build();
     }
 
     /**
      * Convertit les rôles Keycloak (realm_access.roles) en GrantedAuthority Spring Security.
-     *
+     * <p>
      * Problème : Keycloak peut envoyer "ROLE_HEALTH_PROFESSIONAL" (préfixe déjà présent)
      * ou "MEDECIN" (sans préfixe). Spring Security's hasRole() ajoute automatiquement
      * "ROLE_", donc il ne faut jamais doubler le préfixe.
-     *
+     * <p>
      * Solution : normaliser → strip "ROLE_" si présent, puis ajouter "ROLE_".
-     *   "ROLE_HEALTH_PROFESSIONAL" → strip → "HEALTH_PROFESSIONAL" → "ROLE_HEALTH_PROFESSIONAL" ✓
-     *   "MEDECIN"                  → inchangé               → "ROLE_MEDECIN"             ✓
+     * "ROLE_HEALTH_PROFESSIONAL" → strip → "HEALTH_PROFESSIONAL" → "ROLE_HEALTH_PROFESSIONAL" ✓
+     * "MEDECIN"                  → inchangé               → "ROLE_MEDECIN"             ✓
      */
     private ReactiveJwtAuthenticationConverterAdapter keycloakJwtConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
@@ -78,7 +79,7 @@ public class SecurityConfig {
             // MFA obligatoire pour les professionnels de santé (acr = "gold" dans Keycloak)
             boolean isHealthPro = roles.stream().anyMatch(r ->
                     r.equals("ROLE_HEALTH_PROFESSIONAL") || r.equals("HEALTH_PROFESSIONAL")
-                    || r.equals("MEDECIN") || r.equals("INFIRMIERE"));
+                            || r.equals("MEDECIN") || r.equals("INFIRMIERE"));
 
             if (isHealthPro) {
                 String acr = jwt.getClaimAsString("acr");
@@ -89,12 +90,12 @@ public class SecurityConfig {
             }
 
             return roles.stream()
-                .map(role -> {
-                    // Normaliser : supprimer le préfixe ROLE_ s'il est déjà présent
-                    String name = role.startsWith("ROLE_") ? role.substring(5) : role;
-                    return new SimpleGrantedAuthority("ROLE_" + name);
-                })
-                .collect(Collectors.toList());
+                    .map(role -> {
+                        // Normaliser : supprimer le préfixe ROLE_ s'il est déjà présent
+                        String name = role.startsWith("ROLE_") ? role.substring(5) : role;
+                        return new SimpleGrantedAuthority("ROLE_" + name);
+                    })
+                    .collect(Collectors.toList());
         });
         return new ReactiveJwtAuthenticationConverterAdapter(converter);
     }

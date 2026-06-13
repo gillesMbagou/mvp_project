@@ -1,0 +1,15 @@
+target/
+.git/
+.gitignore
+*.md
+*.png
+k8s/
+grafana/
+prometheus/
+promtail/
+otel/
+mosquitto/
+docker/
+.mvn/
+mvnw
+mvnw.cmd

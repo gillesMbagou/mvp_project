@@ -2,7 +2,9 @@ package be.caresync.demo.stream;
 
 import be.caresync.demo.model.GlucoseObservation;
 import be.caresync.demo.model.db.ObservationRecord;
-import be.caresync.demo.repository.ObservationRepository;
+import be.caresync.demo.model.db.SimulatedDevice;
+import be.caresync.demo.repository.jpa.DeviceRepository;
+import be.caresync.demo.repository.jpa.ObservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -12,6 +14,7 @@ import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Pipeline Kafka → SSE.
@@ -29,6 +32,8 @@ import java.time.Instant;
 public class GlucoseEventStream {
 
     private final ObservationRepository obsRepo;
+    private final DeviceRepository deviceRepo;
+    private final ConcurrentHashMap<String, String> serialToPatientCache = new ConcurrentHashMap<>();
 
     /**
      * Hub central : multicast avec buffer de 256 événements par abonné lent.
@@ -57,8 +62,14 @@ public class GlucoseEventStream {
 
     private void persistObservation(GlucoseObservation obs) {
         try {
+            String patientId = serialToPatientCache.computeIfAbsent(obs.getSerial(), s ->
+                    deviceRepo.findById(s)
+                            .map(SimulatedDevice::getPatientId)
+                            .orElse(s)
+            );
+
             obsRepo.save(ObservationRecord.builder()
-                    .patientId(obs.getSerial())
+                    .patientId(patientId)
                     .deviceSerial(obs.getSerial())
                     .deviceType("GLUCOMETER")
                     .loincCode(obs.getLoincCode())
