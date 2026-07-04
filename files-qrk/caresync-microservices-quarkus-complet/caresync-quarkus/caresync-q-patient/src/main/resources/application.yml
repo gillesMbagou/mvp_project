@@ -1,0 +1,48 @@
+quarkus:
+  application:
+    name: caresync-patient-svc
+  http:
+    port: 8090
+
+  oidc:
+    auth-server-url: ${KEYCLOAK_URL:http://localhost:8180/realms/caresync}
+    client-id: caresync-patient-svc
+
+  datasource:
+    db-kind: postgresql
+    username: ${DB_USER:caresync}
+    password: ${DB_PASS:caresync}
+    jdbc:
+      url: jdbc:postgresql://${DB_HOST:localhost}:5432/caresync_patient
+  hibernate-orm:
+    database:
+      generation: update
+
+  redis:
+    hosts: ${REDIS_URL:redis://localhost:6379}
+
+  vault:
+    kv-secret-engine-version: 2
+    kv-secret-engine-mount-path: secret
+    secret-config-kv-path: caresync/patient
+
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BROKERS:localhost:29092}
+
+"%dev":
+  quarkus:
+    devservices:
+      enabled: true
+    vault:
+      devservices:
+        enabled: true
+
+"%prod":
+  quarkus:
+    vault:
+      url: ${VAULT_ADDR:https://vault.caresync.internal:8200}
+      authentication:
+        kubernetes:
+          role: caresync-patient-svc
+          jwt-token-path: /var/run/secrets/kubernetes.io/serviceaccount/token

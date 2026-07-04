@@ -1,0 +1,100 @@
+quarkus:
+  application:
+    name: caresync-iot-svc
+  http:
+    port: 8092
+    # ── CORS ──────────────────────────────────────────────────────────
+    cors:
+      "~": true
+      origins: http://localhost:4200,https://app.caresync.be
+      methods: GET,POST,PUT,DELETE,OPTIONS
+
+  # ── OIDC / Keycloak ──────────────────────────────────────────────────
+  oidc:
+    auth-server-url: ${KEYCLOAK_URL:http://localhost:8180/realms/caresync}
+    client-id: caresync-iot-svc
+    tls:
+      verification: none
+
+  # ── Base de données ───────────────────────────────────────────────────
+  datasource:
+    db-kind: postgresql
+    username: ${DB_USER:caresync}
+    password: ${DB_PASS:caresync}
+    jdbc:
+      url: jdbc:postgresql://${DB_HOST:localhost}:5432/caresync_iot
+  hibernate-orm:
+    database:
+      generation: update
+
+  vault:
+    kv-secret-engine-version: 2
+    kv-secret-engine-mount-path: secret
+    secret-config-kv-path: caresync/iot
+
+# ── MQTT + Kafka : SmallRye Reactive Messaging ──────────────────────────
+mp:
+  messaging:
+    incoming:
+      mqtt-glucose:
+        connector: smallrye-mqtt
+        host: ${MQTT_HOST:localhost}
+        port: 1883
+        topic: caresync/devices/+/glucose
+        auto-reconnect: true
+        keep-alive-seconds: 30
+      mqtt-spo2:
+        connector: smallrye-mqtt
+        host: ${MQTT_HOST:localhost}
+        port: 1883
+        topic: caresync/devices/+/spo2
+      mqtt-weight:
+        connector: smallrye-mqtt
+        host: ${MQTT_HOST:localhost}
+        port: 1883
+        topic: caresync/devices/+/weight
+      observations-sse:
+        connector: smallrye-kafka
+        topic: caresync.iot.observations
+        group:
+          id: caresync-iot-sse
+        auto:
+          offset:
+            reset: latest
+        broadcast: true
+        value:
+          deserializer: be.caresync.common.events.IoTObservationEventDeserializer
+    outgoing:
+      observations-out:
+        connector: smallrye-kafka
+        topic: caresync.iot.observations
+        key:
+          serializer: org.apache.kafka.common.serialization.StringSerializer
+        value:
+          serializer: io.quarkus.kafka.client.serialization.ObjectMapperSerializer
+
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BROKERS:localhost:29092}
+
+# ── Dev Services (uniquement en mode dev: mvn quarkus:dev) ───────────
+# Quarkus démarre automatiquement PostgreSQL, Kafka, Keycloak et Vault en Docker !
+"%dev":
+  quarkus:
+    devservices:
+      enabled: true
+    kafka:
+      devservices:
+        enabled: true
+    vault:
+      devservices:
+        enabled: true
+
+"%prod":
+  quarkus:
+    vault:
+      url: ${VAULT_ADDR:https://vault.caresync.internal:8200}
+      authentication:
+        kubernetes:
+          role: caresync-iot-svc
+          jwt-token-path: /var/run/secrets/kubernetes.io/serviceaccount/token

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>be.caresync</groupId><artifactId>caresync-quarkus</artifactId><version>1.0.0</version></parent>
+  <artifactId>caresync-q-patient</artifactId>
+  <name>CareSync Quarkus Patient :8090</name>
+  <dependencies>
+    <dependency><groupId>be.caresync</groupId><artifactId>caresync-q-common</artifactId></dependency>
+    <!-- RESTEasy Reactive = WebFlux equivalent -->
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-rest-jackson</artifactId></dependency>
+    <!-- Panache = Spring Data JPA equivalent (beaucoup moins de boilerplate) -->
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-orm-panache</artifactId></dependency>
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-jdbc-postgresql</artifactId></dependency>
+    <!-- OIDC = Spring Security OAuth2 equivalent -->
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-oidc</artifactId></dependency>
+    <!-- Kafka (SmallRye) -->
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-messaging-kafka</artifactId></dependency>
+    <!-- Redis cache -->
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-redis-client</artifactId></dependency>
+    <!-- Hibernate validator -->
+    <dependency><groupId>io.quarkus</groupId><artifactId>quarkus-hibernate-validator</artifactId></dependency>
+    <dependency><groupId>io.quarkiverse.vault</groupId><artifactId>quarkus-vault</artifactId></dependency>
+  </dependencies>
+</project>

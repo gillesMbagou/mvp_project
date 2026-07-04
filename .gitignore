@@ -32,3 +32,10 @@ Thumbs.db
 
 # Docker overrides
 docker-compose.override.yml
+
+# Java / Maven
+target/
+*.class
+
+# Claude Code local settings
+.claude/settings.local.json

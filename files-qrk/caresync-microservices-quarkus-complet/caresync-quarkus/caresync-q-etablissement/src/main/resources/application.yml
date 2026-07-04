@@ -1,0 +1,56 @@
+quarkus:
+  application:
+    name: caresync-etablissement-svc
+  http:
+    port: 8091
+
+  oidc:
+    auth-server-url: ${KEYCLOAK_URL:http://localhost:8180/realms/caresync}
+    client-id: caresync-etablissement-svc
+
+  datasource:
+    db-kind: postgresql
+    username: ${DB_USER:caresync}
+    password: ${DB_PASS:caresync}
+    jdbc:
+      url: jdbc:postgresql://${DB_HOST:localhost}:5432/caresync_etablissement
+  hibernate-orm:
+    database:
+      generation: update
+
+  # Client Keycloak Admin (création des comptes praticiens/patients) : le
+  # client-secret ne doit jamais être en clair ici — il est fourni par Vault
+  # (clé "quarkus.keycloak.admin-client.client-secret" sous le chemin ci-dessous).
+  keycloak:
+    admin-client:
+      server-url: ${KEYCLOAK_URL:http://localhost:8180}
+      realm: ${KEYCLOAK_REALM:caresync}
+      client-id: caresync-etablissement-admin
+      client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+      grant-type: CLIENT_CREDENTIALS
+
+  vault:
+    kv-secret-engine-version: 2
+    kv-secret-engine-mount-path: secret
+    secret-config-kv-path: caresync/etablissement
+
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BROKERS:localhost:29092}
+
+"%dev":
+  quarkus:
+    devservices:
+      enabled: true
+    vault:
+      devservices:
+        enabled: true
+
+"%prod":
+  quarkus:
+    vault:
+      url: ${VAULT_ADDR:https://vault.caresync.internal:8200}
+      authentication:
+        kubernetes:
+          role: caresync-etablissement-svc
+          jwt-token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
