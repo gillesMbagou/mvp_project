@@ -1,0 +1,58 @@
+version: "3.8"
+
+# Option B pour le dev local : un Vault persistant (contrairement aux conteneurs
+# éphémères des Quarkus Dev Services, celui-ci survit entre deux `mvn quarkus:dev`)
+# + un Vault Agent qui rend des fichiers .env pour chaque microservice.
+#
+# Usage :
+#   docker compose -f infra/vault-agent/docker-compose.vault-dev.yml up
+#
+# Une fois démarré, chaque caresync-q-<service>/.env contient les clés lues
+# depuis secret/caresync/<service>. Quarkus (via SmallRye Config) charge
+# automatiquement un fichier .env présent dans le répertoire de travail du
+# module — aucune config applicative supplémentaire n'est nécessaire.
+services:
+  vault:
+    image: hashicorp/vault:1.15.2
+    container_name: caresync-vault-dev
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+
+  # Écrit une fois les secrets de démo dans chaque chemin secret/caresync/<service>
+  # (mêmes clés que be.caresync.common.vault.DevVaultSecretSeeder, pour rester cohérent
+  # entre l'option A - Quarkus Dev Services - et l'option B - Vault Agent).
+  vault-seed:
+    image: hashicorp/vault:1.15.2
+    container_name: caresync-vault-seed
+    depends_on:
+      - vault
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: root
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        until vault status >/dev/null 2>&1; do sleep 1; done
+        for svc in alert analytics audit careplan dossier etablissement iot messaging patient prescription; do
+          vault kv put "secret/caresync/$$svc" "demo.vault.secret=caresync-$${svc}-svc-vault-dev-ok"
+        done
+
+  vault-agent:
+    image: hashicorp/vault:1.15.2
+    container_name: caresync-vault-agent
+    depends_on:
+      - vault
+      - vault-seed
+    environment:
+      VAULT_ADDR: http://vault:8200
+    volumes:
+      - ./vault-agent.hcl:/vault/config/vault-agent.hcl:ro
+      - ./dev-token:/vault/config/dev-token:ro
+      - ../..:/workspace
+    entrypoint: ["vault", "agent", "-config=/vault/config/vault-agent.hcl"]
+    restart: unless-stopped

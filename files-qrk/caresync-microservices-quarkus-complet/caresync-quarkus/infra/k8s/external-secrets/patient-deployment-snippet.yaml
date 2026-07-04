@@ -1,0 +1,27 @@
+# Extrait MINIMAL montrant comment un Deployment consomme le Secret K8s créé
+# par l'ExternalSecret ci-dessus — pas un Deployment de prod complet (pas de
+# probes, resources, etc., hors périmètre de ce scaffolding Vault/ESO).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caresync-patient
+  namespace: caresync
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: caresync-patient
+  template:
+    metadata:
+      labels:
+        app: caresync-patient
+    spec:
+      serviceAccountName: caresync-patient # doit correspondre au rôle Vault Kubernetes (Terraform)
+      containers:
+        - name: caresync-patient
+          image: ghcr.io/caresync/caresync-q-patient:latest
+          ports:
+            - containerPort: 8090
+          envFrom:
+            - secretRef:
+                name: caresync-patient-secrets # Secret K8s géré par ESO, jamais Vault directement

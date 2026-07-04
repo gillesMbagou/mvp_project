@@ -1,6 +1,14 @@
 quarkus:
   application:
     name: caresync-iot-svc
+
+  # caresync-q-common est une dépendance "plain jar" : sans ceci, Quarkus ne
+  # scanne pas ses classes pour la découverte de beans CDI (ex. DevVaultSecretSeeder).
+  index-dependency:
+    caresync-common:
+      group-id: be.caresync
+      artifact-id: caresync-q-common
+
   http:
     port: 8092
     # ── CORS ──────────────────────────────────────────────────────────
@@ -19,18 +27,9 @@ quarkus:
   # ── Base de données ───────────────────────────────────────────────────
   datasource:
     db-kind: postgresql
-    username: ${DB_USER:caresync}
-    password: ${DB_PASS:caresync}
-    jdbc:
-      url: jdbc:postgresql://${DB_HOST:localhost}:5432/caresync_iot
   hibernate-orm:
     database:
       generation: update
-
-  vault:
-    kv-secret-engine-version: 2
-    kv-secret-engine-mount-path: secret
-    secret-config-kv-path: caresync/iot
 
 # ── MQTT + Kafka : SmallRye Reactive Messaging ──────────────────────────
 mp:
@@ -73,12 +72,14 @@ mp:
         value:
           serializer: io.quarkus.kafka.client.serialization.ObjectMapperSerializer
 
-kafka:
-  bootstrap:
-    servers: ${KAFKA_BROKERS:localhost:29092}
+# Note : quarkus.datasource.{username,password,jdbc.url} / kafka.bootstrap.servers
+# ne sont volontairement PAS fixés ici : les définir désactive les Dev Services
+# (Postgres, Kafka) qui démarrent automatiquement des conteneurs jetables en %dev.
+# Ils sont configurés explicitement en %prod, où c'est Vault qui fournit le
+# vrai mot de passe (pas de Dev Services en prod).
 
 # ── Dev Services (uniquement en mode dev: mvn quarkus:dev) ───────────
-# Quarkus démarre automatiquement PostgreSQL, Kafka, Keycloak et Vault en Docker !
+# Quarkus démarre automatiquement PostgreSQL, Kafka et Vault en Docker !
 "%dev":
   quarkus:
     devservices:
@@ -87,14 +88,25 @@ kafka:
       devservices:
         enabled: true
     vault:
+      kv-secret-engine-version: 2
+      kv-secret-engine-mount-path: secret
       devservices:
         enabled: true
+        # Le seeding du secret de dev est fait par be.caresync.common.vault.DevVaultSecretSeeder
+        # (bean CDI actif en profil dev), pas par init-commands (trop fragile). Le chemin est une
+        # propriété applicative (pas secret-config-kv-path, lue "eager" au boot et donc fatale
+        # si le chemin n'existe pas encore dans un Vault Dev Services fraîchement créé).
+  app:
+    vault:
+      demo-secret-path: caresync/iot
 
 "%prod":
   quarkus:
-    vault:
-      url: ${VAULT_ADDR:https://vault.caresync.internal:8200}
-      authentication:
-        kubernetes:
-          role: caresync-iot-svc
-          jwt-token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
+    datasource:
+      username: ${DB_USER:caresync}
+      password: ${DB_PASS:caresync}
+      jdbc:
+        url: jdbc:postgresql://${DB_HOST:localhost}:5432/caresync_iot
+  kafka:
+    bootstrap:
+      servers: ${KAFKA_BROKERS:localhost:29092}
