@@ -1,0 +1,40 @@
+{
+  "realm": "caresync",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      { "name": "medecin" },
+      { "name": "infirmier" },
+      { "name": "admin" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "caresync-gateway",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["*"]
+    }
+  ],
+  "users": [
+    {
+      "username": "dr.house",
+      "enabled": true,
+      "email": "dr.house@caresync.be",
+      "credentials": [
+        { "type": "password", "value": "medecin", "temporary": false }
+      ],
+      "realmRoles": ["medecin"]
+    },
+    {
+      "username": "nurse.joy",
+      "enabled": true,
+      "email": "nurse.joy@caresync.be",
+      "credentials": [
+        { "type": "password", "value": "infirmier", "temporary": false }
+      ],
+      "realmRoles": ["infirmier"]
+    }
+  ]
+}

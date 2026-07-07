@@ -1,0 +1,60 @@
+quarkus:
+  application:
+    name: caresync-q-gateway
+  http:
+    port: 8090
+
+    # ── CORS ──────────────────────────────────────────────────────────
+    cors:
+      ~: true
+      origins: http://localhost:4200,https://app.caresync.be
+      methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+      headers: Authorization,Content-Type,X-Request-Id
+      exposed-headers: X-Request-Id
+
+    # Sans cette policy, quarkus-oidc valide un JWT s'il est présent mais ne rejette pas
+    # son absence : une requête sans Authorization atteindrait quand même le proxy.
+    auth:
+      permission:
+        api:
+          paths: /api/*
+          policy: authenticated
+
+    access-log:
+      enabled: true
+      pattern: "\"%h %r %s %b %{i,X-Request-Id}\""
+
+  # ── JWT validation (quarkus-oidc) ───────────────────────────────────
+  oidc:
+    client-id: caresync-gateway
+    application-type: service
+    # Cache des clés publiques Keycloak (JWKS) — pas de réseau à chaque requête
+    jwks:
+      cache-time-to-live: 5M
+
+  # ── Redis (rate limiting) ───────────────────────────────────────────
+  # quarkus.redis.hosts n'est volontairement PAS fixé ici : le définir désactive
+  # les Dev Services Redis qui démarrent un conteneur jetable en %dev. Il est
+  # configuré explicitement en %prod ci-dessous.
+
+  vertx:
+    max-event-loop-execute-time: 2S
+
+# Note : quarkus.oidc.auth-server-url / token.issuer ne sont volontairement PAS
+# fixés ici : les définir désactive les Dev Services Keycloak (conteneur jetable
+# avec le realm importé ci-dessous) qui démarrent automatiquement en %dev.
+
+"%dev":
+  quarkus:
+    keycloak:
+      devservices:
+        realm-path: caresync-realm.json
+
+"%prod":
+  quarkus:
+    oidc:
+      auth-server-url: http://keycloak:8180/realms/caresync
+      token:
+        issuer: http://keycloak:8180/realms/caresync
+    redis:
+      hosts: redis://redis:6379
