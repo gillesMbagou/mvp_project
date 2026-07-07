@@ -1,0 +1,20 @@
+# Broker MQTT pour le dev local de caresync-q-iot (canaux mqtt-glucose /
+# mqtt-spo2 / mqtt-weight). Contrairement à Kafka/PostgreSQL/Vault,
+# l'extension quarkus-messaging-mqtt n'a pas de Quarkus Dev Services : ce
+# broker doit être démarré manuellement, une fois, avant `mvn quarkus:dev`.
+#
+# Usage :
+#   docker compose -f infra/mosquitto/docker-compose.mqtt-dev.yml up -d
+#
+# caresync-q-iot s'y connecte ensuite automatiquement sur localhost:1883
+# (host/port par défaut de son application.yml, override possible via
+# MQTT_HOST). allow_anonymous est activé uniquement pour ce broker de dev.
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: caresync-mosquitto-dev
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped

@@ -67,6 +67,7 @@ mp:
       observations-out:
         connector: smallrye-kafka
         topic: caresync.iot.observations
+        merge: true
         key:
           serializer: org.apache.kafka.common.serialization.StringSerializer
         value:
