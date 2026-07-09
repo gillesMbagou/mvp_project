@@ -1,0 +1,142 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": {
+    "packageManager": "npm"
+  },
+  "newProjectRoot": "projects",
+  "projects": {
+    "caresync-ng22": {
+      "projectType": "application",
+      "schematics": {
+        "@schematics/angular:component": {
+          "style": "scss"
+        }
+      },
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": "dist/caresync-ng22",
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "inlineStyleLanguage": "scss",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "src/assets",
+                "output": "assets"
+              }
+            ],
+            "styles": [
+              "src/styles.scss",
+              {
+                "input": "src/styles/themes/theme-saga-blue.scss",
+                "bundleName": "theme-saga-blue",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-dark-blue.scss",
+                "bundleName": "theme-dark-blue",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-light-green.scss",
+                "bundleName": "theme-light-green",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-dark-green.scss",
+                "bundleName": "theme-dark-green",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-light-orange.scss",
+                "bundleName": "theme-light-orange",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-dark-orange.scss",
+                "bundleName": "theme-dark-orange",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-light-purple.scss",
+                "bundleName": "theme-light-purple",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-dark-purple.scss",
+                "bundleName": "theme-dark-purple",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-light-red.scss",
+                "bundleName": "theme-light-red",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-dark-red.scss",
+                "bundleName": "theme-dark-red",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-light-yellow.scss",
+                "bundleName": "theme-light-yellow",
+                "inject": false
+              },
+              {
+                "input": "src/styles/themes/theme-dark-yellow.scss",
+                "bundleName": "theme-dark-yellow",
+                "inject": false
+              }
+            ],
+            "scripts": []
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1MB",
+                  "maximumError": "2MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "bundles"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.mjs"
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "caresync-ng22:build:production"
+            },
+            "development": {
+              "buildTarget": "caresync-ng22:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}

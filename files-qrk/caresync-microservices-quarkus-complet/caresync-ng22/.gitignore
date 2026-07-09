@@ -1,0 +1,28 @@
+# Dépendances
+/node_modules
+
+# Build
+/dist
+/out-tsc
+/.angular/cache
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sublime-workspace
+
+# Système
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log
+yarn-error.log
+
+# Environnement local
+.env
+.env.local

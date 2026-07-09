@@ -1,0 +1,141 @@
+<p-toast position="top-right" [breakpoints]="{'960px': {width: '100%', right: '0', left: '0'}}" />
+<p-confirmDialog />
+
+<div class="layout" [class.layout--collapsed]="sidebarCollapsed()">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <!-- Logo -->
+    <div class="sidebar__logo">
+      <div class="logo-icon">⚕</div>
+      @if (!sidebarCollapsed()) {
+        <div class="logo-text">
+          <span class="logo-name">CareSync</span>
+          <span class="logo-badge">MONITOR</span>
+        </div>
+      }
+      <button
+        class="sidebar__collapse-btn"
+        pButton pRipple
+        [icon]="sidebarCollapsed() ? 'pi pi-chevron-right' : 'pi pi-chevron-left'"
+        [rounded]="true" severity="secondary" text
+        (click)="toggleSidebar()"
+        [pTooltip]="sidebarCollapsed() ? 'Étendre' : 'Réduire'"
+        tooltipPosition="right"
+      />
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sidebar__nav">
+      @for (item of visibleNavItems(); track item.path) {
+        <a
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          class="nav-item"
+          [pTooltip]="sidebarCollapsed() ? item.label : ''"
+          tooltipPosition="right"
+        >
+          <i [class]="item.icon + ' nav-item__icon'"></i>
+
+          @if (!sidebarCollapsed()) {
+            <span class="nav-item__label">{{ item.label }}</span>
+
+            @if (item.badgeSignal && item.badgeSignal() > 0) {
+              <p-badge
+                [value]="item.badgeSignal()"
+                [severity]="criticalCount() > 0 ? 'danger' : 'warning'"
+                class="nav-item__badge"
+              />
+            }
+          } @else if (item.badgeSignal && item.badgeSignal() > 0) {
+            <span class="nav-item__badge-dot"></span>
+          }
+        </a>
+      }
+    </nav>
+
+    <!-- Footer utilisateur -->
+    <div class="sidebar__footer">
+      <div class="user-card" [pMenuTriggerFor]="userMenu">
+        <p-avatar
+          [label]="user()?.initials ?? '?'"
+          shape="circle"
+          size="normal"
+          class="user-card__avatar"
+        />
+        @if (!sidebarCollapsed()) {
+          <div class="user-card__info">
+            <span class="user-card__name">{{ user()?.displayName }}</span>
+            <span class="user-card__role">
+              @if (auth.isAdmin()) { Administrateur }
+              @else if (auth.isMedecin()) { Médecin }
+              @else { Infirmier }
+            </span>
+          </div>
+          <i class="pi pi-chevron-up user-card__chevron"></i>
+        }
+      </div>
+      <p-menu #userMenu [model]="userMenuItems" [popup]="true" appendTo="body" />
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar__left">
+        <span class="topbar__greeting">
+          Bonjour, <strong>{{ user()?.displayName ?? 'Docteur' }}</strong>
+        </span>
+      </div>
+
+      <div class="topbar__right">
+        <!-- Indicateur surveillance active -->
+        <div class="live-badge">
+          <span class="live-badge__dot"></span>
+          Surveillance active
+        </div>
+
+        <!-- Heure -->
+        <span class="topbar__time">
+          {{ currentTime() | date:'HH:mm' }}
+        </span>
+
+        <!-- Toggle thème -->
+        <button
+          pButton pRipple
+          [icon]="themeIcon()"
+          rounded text
+          severity="secondary"
+          size="small"
+          [pTooltip]="theme.label()"
+          (click)="toggleTheme()"
+          class="topbar__theme-btn"
+        />
+
+        <!-- Cloche alertes -->
+        <button
+          pButton pRipple
+          icon="pi pi-bell"
+          rounded text
+          [severity]="criticalCount() > 0 ? 'danger' : 'secondary'"
+          size="small"
+          routerLink="/app/alertes"
+          [pTooltip]="alertCount() + ' alertes actives'"
+          class="topbar__bell"
+        >
+          @if (alertCount() > 0) {
+            <p-badge [value]="alertCount()" [severity]="criticalCount() > 0 ? 'danger' : 'warning'" />
+          }
+        </button>
+      </div>
+    </header>
+
+    <!-- Contenu de la page -->
+    <div class="content">
+      <router-outlet />
+    </div>
+  </div>
+</div>

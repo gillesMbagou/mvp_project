@@ -1,0 +1,5 @@
+@use 'palettes' as p;
+
+:root:not(.dark) {
+  @include p.cs-accent-theme(p.$orange, 'light');
+}

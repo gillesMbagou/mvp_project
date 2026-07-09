@@ -1,0 +1,35 @@
+{
+  "name": "caresync-ng22",
+  "version": "1.0.0",
+  "description": "CareSync Monitor — Frontend Angular 21 + PrimeNG 21",
+  "scripts": {
+    "start": "ng serve --proxy-config proxy.conf.mjs",
+    "build": "ng build --configuration production",
+    "test": "ng test"
+  },
+  "dependencies": {
+    "@angular/animations": "^21.0.0",
+    "@angular/cdk": "^21.0.0",
+    "@angular/common": "^21.0.0",
+    "@angular/compiler": "^21.0.0",
+    "@angular/core": "^21.0.0",
+    "@angular/forms": "^21.0.0",
+    "@angular/platform-browser": "^21.0.0",
+    "@angular/router": "^21.0.0",
+    "@primeng/themes": "^21.0.0",
+    "chart.js": "^4.4.0",
+    "keycloak-angular": "^21.0.0",
+    "keycloak-js": "^26.0.0",
+    "primeicons": "^7.0.0",
+    "primeng": "^21.0.0",
+    "rxjs": "^7.8.0",
+    "tslib": "^2.7.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^21.0.0",
+    "@angular/cli": "^21.0.0",
+    "@angular/compiler-cli": "^21.0.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,5 @@
+@use 'palettes' as p;
+
+html.dark {
+  @include p.cs-accent-theme(p.$green, 'dark');
+}
