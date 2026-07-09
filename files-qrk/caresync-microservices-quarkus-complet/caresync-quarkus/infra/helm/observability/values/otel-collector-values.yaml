@@ -1,0 +1,71 @@
+# helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
+#   -n observability -f otel-collector-values.yaml
+#
+# mode Deployment (pas DaemonSet) : les 11 microservices poussent en OTLP
+# (push), pas de scraping de logs à faire depuis les nœuds. image "contrib" car
+# l'exporter Loki n'existe que dans cette distribution (pas dans "core").
+# Sans fullnameOverride, le chart préfixe les ressources par
+# "<release>-opentelemetry-collector" ; les ConfigMaps dev/prod pointent sur
+# le nom court "otel-collector", donc fixé explicitement ici.
+fullnameOverride: otel-collector
+
+mode: deployment
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+replicaCount: 1
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 512Mi}
+
+ports:
+  otlp:
+    enabled: true
+  otlp-http:
+    enabled: true
+  metrics:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
+
+# Config identique à infra/monitoring/otel-collector-config.yaml (dupliquée
+# ici car le chart attend la config directement en values, pas un fichier
+# externe référencé — voir infra/monitoring/otel-collector-config.yaml pour
+# les commentaires détaillés sur la topologie).
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  processors:
+    batch: {}
+    memory_limiter:
+      check_interval: 5s
+      limit_mib: 400
+  exporters:
+    otlp/jaeger:
+      endpoint: jaeger-collector.observability.svc.cluster.local:4317
+      tls:
+        insecure: true
+    prometheus:
+      endpoint: 0.0.0.0:8889
+    loki:
+      endpoint: http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/jaeger]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheus]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [loki]

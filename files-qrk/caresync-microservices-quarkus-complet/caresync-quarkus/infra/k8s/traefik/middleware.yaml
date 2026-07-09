@@ -1,56 +1,22 @@
-
+# Rate-limit en défense en profondeur devant le gateway (seul point d'entrée
+# HTTP externe, cf. infra/k8s/overlays/{dev,prod}/ingress-*.yaml).
+#
+# SUPERSEDED : la version précédente de ce fichier routait aussi 3 services
+# (patient/etablissement/alert) directement via Ingress avec un Middleware
+# forwardAuth JWT — incohérent avec l'architecture réelle du gateway
+# (caresync-q-gateway/.../GatewayProxy.java) qui fait déjà lui-même la
+# validation JWT (quarkus-oidc) ET le routage interne vers les 10 autres
+# services par nom DNS (caresync-q-<service>). Exposer les services
+# directement en plus du gateway court-circuitait son rate-limiting Redis et
+# son circuit breaker. Les Ingress applicatifs vivent désormais uniquement
+# dans infra/k8s/overlays/{dev,prod}/ingress-*.yaml et ne référencent QUE
+# caresync-q-gateway.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: caresync-ratelimit
+  namespace: caresync
 spec:
   rateLimit:
     average: 30
     burst: 60
-
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: caresync-jwt
-spec:
-  forwardAuth:
-    address: http://keycloak:8180/realms/caresync/protocol/openid-connect/userinfo
-    authResponseHeaders:
-      - X-User-Id
-      - X-User-Roles
-
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: |
-      default-caresync-jwt@kubernetescrd,
-      default-caresync-ratelimit@kubernetescrd
-spec:
-  rules:
-    - host: api.caresync.be
-      http:
-        paths:
-          - path: /api/v1/patients
-            pathType: Prefix
-            backend:
-              service:
-                name: caresync-q-patient
-                port:
-                  number: 8097
-          - path: /api/v1/etablissements
-            pathType: Prefix
-            backend:
-              service:
-                name: caresync-q-etablissement
-                port:
-                  number: 8091
-          - path: /api/v1/alerts
-            pathType: Prefix
-            backend:
-              service:
-                name: caresync-q-alert
-                port:
-                  number: 8093

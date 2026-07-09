@@ -1,0 +1,46 @@
+# helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+#   -n observability --create-namespace -f kube-prometheus-stack-values.yaml
+#
+# Fournit Prometheus + Grafana + Alertmanager + les CRD ServiceMonitor
+# consommées par infra/monitoring/servicemonitors/. Config légère (dev), à
+# revoir pour prod (rétention, HA, stockage persistant dimensionné).
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    resources:
+      requests: {cpu: 200m, memory: 512Mi}
+      limits: {cpu: 500m, memory: 1Gi}
+    # Sélectionne tous les ServiceMonitor du cluster, pas seulement ceux avec
+    # un label release=<nom-helm> (comportement par défaut de ce chart) — sinon
+    # infra/monitoring/servicemonitors/quarkus-services-servicemonitor.yaml
+    # (créé hors du chart) serait ignoré.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+grafana:
+  adminPassword: devpassword
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: 250m, memory: 256Mi}
+  sidecar:
+    dashboards:
+      enabled: true
+    datasources:
+      enabled: true
+  additionalDataSources:
+    - name: Jaeger
+      type: jaeger
+      url: http://jaeger-query.observability.svc.cluster.local:16686
+      access: proxy
+    - name: Loki
+      type: loki
+      url: http://loki-gateway.observability.svc.cluster.local
+      access: proxy
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests: {cpu: 50m, memory: 64Mi}
+      limits: {cpu: 100m, memory: 128Mi}

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: caresync-q-audit
+  labels:
+    app.kubernetes.io/name: caresync-q-audit
+    app.kubernetes.io/part-of: caresync
+    app.kubernetes.io/component: backend
+spec:
+  selector:
+    app.kubernetes.io/name: caresync-q-audit
+  ports:
+    - name: http
+      port: 8100
+      targetPort: http

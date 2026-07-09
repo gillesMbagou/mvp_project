@@ -1,0 +1,42 @@
+# Un seul point d'entrée HTTP externe : le gateway expose /api/* (les 10
+# autres services restent ClusterIP, jamais exposés directement — cf.
+# GatewayProxy.java qui route déjà en interne). Adapter les hosts à votre
+# cluster dev (ex. nip.io : api.dev.<IP>.nip.io / app.dev.<IP>.nip.io).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: caresync-api-dev
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: |
+      caresync-caresync-ratelimit@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: api.dev.caresync.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: caresync-q-gateway
+                port:
+                  number: 8090
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: caresync-frontend-dev
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: dev.caresync.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: caresync-frontend
+                port:
+                  number: 80

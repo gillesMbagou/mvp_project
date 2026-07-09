@@ -35,6 +35,19 @@
     <lombok.version>1.18.46</lombok.version>
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jacoco.version>0.8.12</jacoco.version>
+    <sonar.version>3.11.0.3922</sonar.version>
+
+    <!-- Config SonarQube/SonarCloud (host/token/organisation passés en CI via
+         -Dsonar.host.url / -Dsonar.token / -Dsonar.organization, jamais committés).
+         Quality gate bloquant : mvn sonar:sonar échoue le build si le gate échoue. -->
+    <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
+    <sonar.projectKey>caresync-quarkus</sonar.projectKey>
+    <!-- Chaque module produit son propre target/site/jacoco/jacoco.xml (goal
+         `report` ci-dessous exécuté module par module) ; Sonar agrège lui-même
+         tous les chemins correspondant à ce glob, pas besoin d'un module
+         agrégateur dédié. -->
+    <sonar.coverage.jacoco.xmlReportPaths>**/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
   </properties>
 
   <dependencyManagement>
@@ -78,6 +91,13 @@
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
+    </dependency>
+    <!-- Traces distribuées OTLP -> OTel Collector (endpoint via la variable
+         d'env standard OTEL_EXPORTER_OTLP_ENDPOINT, reconnue automatiquement,
+         pas de config YAML par service nécessaire). -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-opentelemetry</artifactId>
     </dependency>
     <!-- Tests BDD Cucumber -->
     <dependency>
@@ -142,6 +162,30 @@
             <cucumber.features>src/test/resources/features</cucumber.features>
           </systemPropertyVariables>
         </configuration>
+      </plugin>
+      <!-- Couverture de code (consommée par sonar.coverage.jacoco.xmlReportPaths
+           ci-dessus). prepare-agent instrumente les tests, report génère le XML
+           dans target/site/jacoco/jacoco.xml de chaque module. -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <executions>
+          <execution>
+            <id>jacoco-prepare-agent</id>
+            <goals><goal>prepare-agent</goal></goals>
+          </execution>
+          <execution>
+            <id>jacoco-report</id>
+            <phase>test</phase>
+            <goals><goal>report</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.sonarsource.scanner.maven</groupId>
+        <artifactId>sonar-maven-plugin</artifactId>
+        <version>${sonar.version}</version>
       </plugin>
     </plugins>
   </build>

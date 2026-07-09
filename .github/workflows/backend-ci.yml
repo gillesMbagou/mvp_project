@@ -1,0 +1,57 @@
+name: Backend CI (caresync-quarkus)
+
+on:
+  push:
+    branches: [develop, main]
+    paths: ["files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus/**"]
+  pull_request:
+    paths: ["files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus/**"]
+  workflow_dispatch: {}
+  # Réutilisé tel quel par backend-cd-dev.yml / backend-cd-prod.yml (needs: ci)
+  # plutôt qu'un déclenchement chaîné via workflow_run — plus simple, pas de
+  # délai entre CI et CD, un seul job Sonar exécuté par run.
+  workflow_call: {}
+
+defaults:
+  run:
+    working-directory: files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus
+
+jobs:
+  build-test-sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Build + tests des 12 modules en une passe (le pom parent agrège) —
+      # pas de matrix ici, caresync-q-common n'a besoin d'être compilé qu'une
+      # fois et les tests des 11 services partagent le même run Maven.
+      - name: Build & test (multi-module)
+        run: mvn -B verify
+
+      - name: Publier les rapports de tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus/**/target/surefire-reports/**
+            files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus/**/target/cucumber-reports/**
+
+      # Quality gate bloquant : sonar.qualitygate.wait=true (pom racine) fait
+      # échouer ce step — donc le job, donc backend-cd-dev/prod qui en dépendent
+      # — si le gate échoue. SONAR_HOST_URL/SONAR_TOKEN : self-hosted ou SonarCloud.
+      - name: Analyse SonarQube (quality gate bloquant)
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          mvn -B sonar:sonar \
+            -Dsonar.host.url="$SONAR_HOST_URL" \
+            -Dsonar.token="$SONAR_TOKEN" \
+            ${{ secrets.SONAR_ORGANIZATION && format('-Dsonar.organization={0}', secrets.SONAR_ORGANIZATION) || '' }}

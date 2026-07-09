@@ -1,0 +1,62 @@
+name: Observabilité dev (Prometheus/Grafana/Jaeger/Loki/OTel Collector)
+
+on:
+  workflow_dispatch: {}
+
+env:
+  BACKEND_DIR: files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4
+
+      - name: Configurer kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_DEV }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Namespace observability
+        run: kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Ajouter les repos Helm
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana-community https://grafana-community.github.io/helm-charts
+          helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+          helm repo update
+
+      - name: kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+            -n observability -f infra/helm/observability/values/kube-prometheus-stack-values.yaml \
+            --wait --timeout 8m
+
+      - name: Jaeger (all-in-one)
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: kubectl kustomize infra/helm/observability/jaeger | kubectl apply -f -
+
+      - name: Loki
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          helm upgrade --install loki grafana-community/loki -n observability \
+            -f infra/helm/observability/values/loki-values.yaml --wait --timeout 5m
+
+      - name: OTel Collector
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
+            -n observability -f infra/helm/observability/values/otel-collector-values.yaml \
+            --wait --timeout 5m
+
+      # Nécessite les CRD Prometheus Operator (installées par kube-prometheus-stack
+      # ci-dessus) et le namespace "caresync" déjà créé (workflow
+      # infra-dev-dependencies.yml, ou backend-cd-dev.yml après un premier apply).
+      - name: ServiceMonitor microservices CareSync
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: kubectl apply -f infra/monitoring/servicemonitors/quarkus-services-servicemonitor.yaml

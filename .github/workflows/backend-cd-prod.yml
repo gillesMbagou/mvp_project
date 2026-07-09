@@ -1,0 +1,116 @@
+name: Backend CD — prod (caresync-quarkus)
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch: {}
+
+env:
+  BACKEND_DIR: files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/backend-ci.yml
+    secrets: inherit
+
+  build-images:
+    needs: ci
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { service: gateway,        port: 8090 }
+          - { service: etablissement,  port: 8091 }
+          - { service: iot,            port: 8092 }
+          - { service: alert,          port: 8093 }
+          - { service: careplan,       port: 8094 }
+          - { service: prescription,   port: 8095 }
+          - { service: dossier,        port: 8096 }
+          - { service: patient,        port: 8097 }
+          - { service: messaging,      port: 8098 }
+          - { service: analytics,      port: 8099 }
+          - { service: audit,          port: 8100 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push caresync-q-${{ matrix.service }}:${{ github.ref_name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.BACKEND_DIR }}
+          file: ${{ env.BACKEND_DIR }}/Dockerfile
+          build-args: |
+            SERVICE_MODULE=caresync-q-${{ matrix.service }}
+            SERVICE_PORT=${{ matrix.port }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/caresync-q-${{ matrix.service }}:${{ github.ref_name }}
+          cache-from: type=gha,scope=caresync-q-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=caresync-q-${{ matrix.service }}
+
+      - name: Scan Trivy (bloquant sur CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/caresync-q-${{ matrix.service }}:${{ github.ref_name }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  deploy:
+    needs: build-images
+    runs-on: ubuntu-latest
+    # Règle de protection GitHub Environments (reviewers requis) sur
+    # "production" : ce job reste en attente tant que personne n'approuve.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configurer kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > "$HOME/.kube/config"
+
+      # Config non-sensible uniquement (endpoints des dépendances externes/
+      # managées). Les secrets applicatifs (DB_USER/DB_PASS) ne transitent
+      # JAMAIS par ce workflow : ils viennent d'ESO + Vault, déjà en place
+      # (infra/k8s/external-secrets/, infra/terraform/vault/), appliqués via
+      # kubectl apply -k ci-dessous mais jamais générés/modifiés ici.
+      - name: Générer configmap-prod.env depuis les GitHub Secrets
+        working-directory: ${{ env.BACKEND_DIR }}/infra/k8s/overlays/prod
+        env:
+          PROD_DB_HOST: ${{ secrets.PROD_DB_HOST }}
+          PROD_KAFKA_BROKERS: ${{ secrets.PROD_KAFKA_BROKERS }}
+          PROD_KEYCLOAK_URL: ${{ secrets.PROD_KEYCLOAK_URL }}
+          PROD_REDIS_HOST: ${{ secrets.PROD_REDIS_HOST }}
+          PROD_MQTT_HOST: ${{ secrets.PROD_MQTT_HOST }}
+          PROD_OTEL_ENDPOINT: ${{ secrets.PROD_OTEL_ENDPOINT }}
+        run: envsubst < configmap-prod.env.example > configmap-prod.env
+
+      - name: Fixer les tags d'image (${{ github.ref_name }})
+        working-directory: ${{ env.BACKEND_DIR }}/infra/k8s/overlays/prod
+        run: |
+          curl -sL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz
+          for svc in gateway etablissement iot alert careplan prescription dossier patient messaging analytics audit; do
+            ./kustomize edit set image caresync-q-${svc}=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/caresync-q-${svc}:${{ github.ref_name }}
+          done
+
+      - name: kubectl apply -k overlays/prod (hors frontend)
+        working-directory: ${{ env.BACKEND_DIR }}/infra/k8s/overlays/prod
+        run: |
+          # Exclut caresync-frontend, géré par frontend-cd-prod.yml — même
+          # raisonnement que backend-cd-dev.yml.
+          kubectl kustomize . | yq 'select(.metadata.name != "caresync-frontend")' | kubectl apply -f -
+          rm -f configmap-prod.env
+
+      - name: Attendre le rollout
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          for svc in gateway etablissement iot alert careplan prescription dossier patient messaging analytics audit; do
+            kubectl -n caresync rollout status deployment/caresync-q-${svc} --timeout=300s
+          done

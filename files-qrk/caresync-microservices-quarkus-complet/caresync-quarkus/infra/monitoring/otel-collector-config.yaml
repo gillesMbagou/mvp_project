@@ -1,0 +1,45 @@
+# Config OTel Collector — adaptée de
+# glucose-java-demo-stream/glucose-java-demo-stream/otel/otel-collector-config.yaml
+# (même topologie : OTLP en entrée -> Jaeger/Prometheus/Loki en sortie).
+#
+# Point d'entrée unique pour les 11 microservices (OTEL_EXPORTER_OTLP_ENDPOINT
+# commun, cf. overlays/{dev,prod}) : traces + métriques + logs (OTLP logs,
+# QUARKUS_OTEL_LOGS_ENABLED=true) arrivent tous ici avant d'être routés.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 400
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger-collector.observability.svc.cluster.local:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: 0.0.0.0:8889
+  loki:
+    endpoint: http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [loki]

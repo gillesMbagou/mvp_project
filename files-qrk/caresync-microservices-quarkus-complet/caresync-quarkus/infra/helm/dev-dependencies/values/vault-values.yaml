@@ -1,0 +1,29 @@
+# helm upgrade --install vault hashicorp/vault -n caresync -f vault-values.yaml
+#
+# Mode dev/standalone (in-memory, non scellé automatiquement, root token
+# fixe) — jamais pour prod. En prod, Vault est externe/managé (cf.
+# infra/README.md, infra/terraform/vault/). Ce Vault dev n'est pas consommé
+# directement par les microservices dev (qui utilisent des Secrets K8s
+# classiques via secretGenerator, cf. overlays/dev/) : il sert uniquement à
+# répliquer localement le flux Terraform + ESO pour tester infra/k8s/external-secrets/
+# sans dépendre d'un vrai Vault staging/prod.
+server:
+  dev:
+    enabled: true
+    devRootToken: "devroottoken"
+
+  standalone:
+    enabled: true
+
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: 250m, memory: 256Mi}
+
+  dataStorage:
+    enabled: false
+
+injector:
+  enabled: false
+
+ui:
+  enabled: true

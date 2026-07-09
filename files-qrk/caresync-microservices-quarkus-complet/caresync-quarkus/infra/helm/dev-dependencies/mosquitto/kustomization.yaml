@@ -1,0 +1,16 @@
+# Pas de chart Helm officiel simple pour Mosquitto : manifeste brut. mosquitto.conf
+# ici est une copie de infra/mosquitto/mosquitto.conf (dev local) — dupliquée
+# plutôt que référencée à distance car la politique de sécurité par défaut de
+# Kustomize interdit à configMapGenerator.files de sortir de ce dossier.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: caresync
+resources:
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: mosquitto-config
+    files:
+      - mosquitto.conf
+generatorOptions:
+  disableNameSuffixHash: true

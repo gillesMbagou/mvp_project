@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: caresync-q-etablissement
+  labels:
+    app.kubernetes.io/name: caresync-q-etablissement
+    app.kubernetes.io/part-of: caresync
+    app.kubernetes.io/component: backend
+spec:
+  selector:
+    app.kubernetes.io/name: caresync-q-etablissement
+  ports:
+    - name: http
+      port: 8091
+      targetPort: http

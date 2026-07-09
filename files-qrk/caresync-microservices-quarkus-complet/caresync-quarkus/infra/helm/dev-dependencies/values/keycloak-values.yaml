@@ -1,0 +1,46 @@
+# helm upgrade --install keycloak bitnami/keycloak -n caresync -f keycloak-values.yaml
+#
+# fullnameOverride=keycloak IMPÉRATIF : caresync-q-gateway a
+# "http://keycloak:8180/realms/caresync" en dur en %prod (pas de variable
+# d'env). httpPort=8180 pour matcher ce même hardcode (port par défaut du
+# chart est 8080, changé volontairement ici).
+fullnameOverride: keycloak
+
+auth:
+  adminUser: admin
+  adminPassword: devpassword
+
+httpPort: 8180
+
+service:
+  ports:
+    http: 8180
+
+production: false
+proxyHeaders: xforwarded
+
+# Realm CareSync dev pré-importé (client public caresync-frontend, redirectUris
+# localhost:4200 — cf. infra/keycloak/caresync-realm-dev.json), monté via un
+# ConfigMap créé séparément par le workflow observability/infra-dev-dependencies
+# (kubectl create configmap keycloak-realm --from-file=...).
+extraVolumes:
+  - name: realm-import
+    configMap:
+      name: keycloak-realm-dev
+extraVolumeMounts:
+  - name: realm-import
+    mountPath: /opt/bitnami/keycloak/data/import
+extraStartupArgs: "--import-realm"
+
+replicaCount: 1
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: "1", memory: 1Gi}
+
+postgresql:
+  enabled: true
+  auth:
+    password: devpassword
+  primary:
+    persistence:
+      enabled: false

@@ -1,0 +1,11 @@
+# Un seul patch, appliqué à tous les Deployments porteurs du label commun
+# app.kubernetes.io/part-of=caresync (11 microservices + frontend) — pas besoin
+# d'un patch par service, target.labelSelector fait le matching en une fois.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: placeholder
+  labels:
+    app.kubernetes.io/part-of: caresync
+spec:
+  replicas: 3

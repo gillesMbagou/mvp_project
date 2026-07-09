@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caresync-q-patient
+  labels:
+    app.kubernetes.io/name: caresync-q-patient
+    app.kubernetes.io/part-of: caresync
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: caresync-q-patient
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: caresync-q-patient
+        app.kubernetes.io/part-of: caresync
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /q/metrics
+        prometheus.io/port: "8097"
+    spec:
+      serviceAccountName: caresync-patient
+      containers:
+        - name: app
+          image: caresync-q-patient
+          ports:
+            - name: http
+              containerPort: 8097
+          envFrom:
+            - configMapRef:
+                name: caresync-common-config
+            - secretRef:
+                name: caresync-patient-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20

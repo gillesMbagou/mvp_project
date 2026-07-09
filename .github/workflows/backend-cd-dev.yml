@@ -1,0 +1,113 @@
+name: Backend CD — dev (caresync-quarkus)
+
+on:
+  push:
+    branches: [develop]
+    paths: ["files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus/**"]
+  workflow_dispatch: {}
+
+env:
+  BACKEND_DIR: files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/backend-ci.yml
+    secrets: inherit
+
+  build-images:
+    needs: ci
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # caresync-q-common exclu : lib partagée sans service HTTP, pas d'image.
+        include:
+          - { service: gateway,        port: 8090 }
+          - { service: etablissement,  port: 8091 }
+          - { service: iot,            port: 8092 }
+          - { service: alert,          port: 8093 }
+          - { service: careplan,       port: 8094 }
+          - { service: prescription,   port: 8095 }
+          - { service: dossier,        port: 8096 }
+          - { service: patient,        port: 8097 }
+          - { service: messaging,      port: 8098 }
+          - { service: analytics,      port: 8099 }
+          - { service: audit,          port: 8100 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push caresync-q-${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.BACKEND_DIR }}
+          file: ${{ env.BACKEND_DIR }}/Dockerfile
+          build-args: |
+            SERVICE_MODULE=caresync-q-${{ matrix.service }}
+            SERVICE_PORT=${{ matrix.port }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/caresync-q-${{ matrix.service }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=caresync-q-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=caresync-q-${{ matrix.service }}
+
+      - name: Scan Trivy (bloquant sur CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/caresync-q-${{ matrix.service }}:sha-${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  deploy:
+    needs: build-images
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configurer kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_DEV }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Générer secrets/db.env depuis les GitHub Secrets
+        working-directory: ${{ env.BACKEND_DIR }}/infra/k8s/overlays/dev
+        env:
+          DEV_DB_USER: ${{ secrets.DEV_DB_USER }}
+          DEV_DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
+        run: envsubst < secrets/db.env.example > secrets/db.env
+
+      - name: Fixer les tags d'image (sha-${{ github.sha }})
+        working-directory: ${{ env.BACKEND_DIR }}/infra/k8s/overlays/dev
+        run: |
+          curl -sL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz
+          for svc in gateway etablissement iot alert careplan prescription dossier patient messaging analytics audit; do
+            ./kustomize edit set image caresync-q-${svc}=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/caresync-q-${svc}:sha-${{ github.sha }}
+          done
+
+      - name: kubectl apply -k overlays/dev (hors frontend)
+        working-directory: ${{ env.BACKEND_DIR }}/infra/k8s/overlays/dev
+        run: |
+          # Exclut caresync-frontend : c'est frontend-cd-dev.yml qui gère son
+          # déploiement (image buildée séparément, cf. son propre workflow) ;
+          # l'inclure ici régresserait son tag vers le placeholder du manifeste.
+          kubectl kustomize . | yq 'select(.metadata.name != "caresync-frontend")' | kubectl apply -f -
+          rm -f secrets/db.env
+
+      - name: Attendre le rollout
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          for svc in gateway etablissement iot alert careplan prescription dossier patient messaging analytics audit; do
+            kubectl -n caresync rollout status deployment/caresync-q-${svc} --timeout=180s
+          done

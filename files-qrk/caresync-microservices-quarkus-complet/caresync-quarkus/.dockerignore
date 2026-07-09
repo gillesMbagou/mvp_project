@@ -1,0 +1,9 @@
+**/target/
+**/.mvn/
+!**/src/**
+.git/
+.idea/
+.vscode/
+*.md
+infra/
+cucumber-features/

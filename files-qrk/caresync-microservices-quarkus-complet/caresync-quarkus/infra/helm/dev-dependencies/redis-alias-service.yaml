@@ -1,0 +1,20 @@
+# Le chart bitnami/redis ne permet pas d'obtenir un Service nommé "redis" nu
+# (toujours suffixé -master/-headless, même avec fullnameOverride). Ce Service
+# alias, appliqué séparément (kubectl apply -f, PAS géré par Helm), pointe sur
+# les mêmes pods que redis-master via le même sélecteur — nécessaire car
+# caresync-q-gateway a "redis://redis:6379" en dur en %prod (pas de variable
+# d'env pour le nom d'hôte). À appliquer après `helm install redis`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: caresync
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/instance: redis
+    app.kubernetes.io/component: master
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: redis

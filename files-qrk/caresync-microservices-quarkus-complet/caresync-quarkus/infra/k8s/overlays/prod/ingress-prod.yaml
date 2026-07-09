@@ -1,0 +1,46 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: caresync-api-prod
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: |
+      caresync-caresync-ratelimit@kubernetescrd
+    # TLS géré en amont selon le cluster (cert-manager, annotations à adapter) :
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [api.caresync.be]
+      secretName: caresync-api-tls
+  rules:
+    - host: api.caresync.be
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: caresync-q-gateway
+                port:
+                  number: 8090
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: caresync-frontend-prod
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [app.caresync.be]
+      secretName: caresync-frontend-tls
+  rules:
+    - host: app.caresync.be
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: caresync-frontend
+                port:
+                  number: 80

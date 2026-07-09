@@ -24,12 +24,13 @@ mais le chemin de délivrance passe entièrement par ESO — aucune dépendance
 réseau vers Vault depuis les pods applicatifs, aucun client `quarkus-vault`
 actif hors du profil `%dev`.
 
-## À faire pour les 9 autres services
+## Les 9 autres services
 
-Ce dossier ne contient qu'un exemple représentatif (`patient`). Dupliquer
-`cluster-secret-store.yaml` et `patient-external-secret.yaml` pour : `alert`,
-`analytics`, `audit`, `careplan`, `dossier`, `etablissement`, `iot`,
-`messaging`, `prescription` — en remplaçant `patient` par le nom du service
-partout (métadonnées, `role`, `remoteRef.key`). Un futur chart Helm ou
-Kustomize base pourrait templatiser ça ; ce dossier est un point de départ,
-pas la version finale.
+Fait : `<service>-secret-store.yaml` + `<service>-external-secret.yaml` pour
+`alert`, `analytics`, `audit`, `careplan`, `dossier`, `etablissement`, `iot`,
+`messaging`, `prescription` (calqués sur le patron `patient-*`, mêmes clés
+`DB_USER`/`DB_PASS`). `kustomization.yaml` dans ce dossier les référence tous
+(sauf `patient-deployment-snippet.yaml`, un extrait illustratif, pas une
+ressource à déployer) — c'est ce qui permet à
+`../overlays/prod/kustomization.yaml` de référencer `../../external-secrets`
+comme une seule ressource. Voir `../README.md` pour la vue d'ensemble CI/CD.

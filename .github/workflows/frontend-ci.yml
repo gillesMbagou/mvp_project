@@ -1,0 +1,36 @@
+name: Frontend CI (caresync-ng22)
+
+on:
+  push:
+    branches: [develop, main]
+    paths: ["files-qrk/caresync-microservices-quarkus-complet/caresync-ng22/**"]
+  pull_request:
+    paths: ["files-qrk/caresync-microservices-quarkus-complet/caresync-ng22/**"]
+  workflow_dispatch: {}
+  workflow_call: {}
+
+defaults:
+  run:
+    working-directory: files-qrk/caresync-microservices-quarkus-complet/caresync-ng22
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: files-qrk/caresync-microservices-quarkus-complet/caresync-ng22/package-lock.json
+
+      - run: npm ci
+
+      # Pas de cible "test" dans angular.json ni de fichiers *.spec.ts dans ce
+      # projet actuellement (vérifié : aucun test unitaire configuré) — rien à
+      # exécuter ici. Dès qu'un premier spec sera ajouté, ajouter une cible
+      # "test" (@angular/build:karma ou équivalent) dans angular.json puis
+      # `npm test -- --watch=false` ici, avant le build.
+
+      - run: npm run build

@@ -1,0 +1,33 @@
+# helm upgrade --install kafka bitnami/kafka -n caresync -f kafka-values.yaml
+#
+# 1 broker KRaft (pas de Zookeeper), sans HA — dev uniquement.
+# fullnameOverride=kafka pour matcher KAFKA_BROKERS=kafka:9092.
+fullnameOverride: kafka
+
+listeners:
+  client:
+    protocol: PLAINTEXT
+  controller:
+    protocol: PLAINTEXT
+  interbroker:
+    protocol: PLAINTEXT
+
+controller:
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 4Gi
+  resources:
+    requests: {cpu: 250m, memory: 512Mi}
+    limits: {cpu: "1", memory: 1Gi}
+
+# Un seul pod jouant les deux rôles (controller+broker) en mode combiné : pas
+# de pool broker séparé nécessaire pour du dev à un seul nœud.
+broker:
+  replicaCount: 0
+
+kraft:
+  enabled: true
+
+zookeeper:
+  enabled: false

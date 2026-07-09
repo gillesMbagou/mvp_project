@@ -1,0 +1,10 @@
+# Le chart bitnami/jaeger impose Cassandra par défaut (lourd, non pertinent en
+# dev). all-in-one (image officielle jaegertracing/all-in-one, stockage
+# in-memory) est largement suffisant pour visualiser des traces en dev — les
+# traces ne survivent pas à un redémarrage, ce qui est acceptable ici.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+resources:
+  - deployment.yaml
+  - service.yaml

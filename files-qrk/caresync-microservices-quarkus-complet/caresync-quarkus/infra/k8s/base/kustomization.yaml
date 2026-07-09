@@ -1,0 +1,29 @@
+# Base Kustomize — 11 microservices HTTP CareSync (caresync-q-common exclu,
+# lib partagée sans service HTTP). Jamais appliquée seule : toujours via
+# overlays/dev ou overlays/prod, qui fournissent le ConfigMap
+# "caresync-common-config" et les Secrets référencés par chaque Deployment.
+#
+# Convention de nommage (voir infra/terraform/vault/kubernetes_auth.tf) :
+#   - Deployment/Service : caresync-q-<service>  (caresync-q-gateway route en
+#     interne par ce nom DNS exact, cf. GatewayProxy.java ROUTES)
+#   - ServiceAccount/Secret : caresync-<service> / caresync-<service>-secrets
+#     (doit correspondre aux rôles Vault Kubernetes déjà provisionnés par Terraform)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: caresync
+
+resources:
+  - namespace.yaml
+  - ../traefik
+  - services/gateway
+  - services/etablissement
+  - services/iot
+  - services/alert
+  - services/careplan
+  - services/prescription
+  - services/dossier
+  - services/patient
+  - services/messaging
+  - services/analytics
+  - services/audit

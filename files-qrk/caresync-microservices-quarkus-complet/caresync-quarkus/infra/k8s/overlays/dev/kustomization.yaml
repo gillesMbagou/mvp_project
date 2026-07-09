@@ -1,0 +1,95 @@
+# Overlay dev — environnement autonome : Kafka/Postgres/Keycloak/Vault/Redis/
+# Mosquitto tournent in-cluster (voir infra/helm/dev-dependencies/), les noms
+# de Service ci-dessous DOIVENT correspondre aux fullnameOverride Helm.
+#
+# Les tags d'image (:dev par défaut ici) sont réécrits à chaque run CI via
+# `kustomize edit set image caresync-q-<service>=ghcr.io/<owner>/caresync-q-<service>:sha-xxx`
+# (voir .github/workflows/backend-cd-dev.yml) — les valeurs ci-dessous ne
+# servent que de fallback pour un `kubectl apply -k` manuel en local.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - ../../frontend
+  - ingress-dev.yaml
+
+images:
+  - name: caresync-q-gateway
+    newTag: dev
+  - name: caresync-q-etablissement
+    newTag: dev
+  - name: caresync-q-iot
+    newTag: dev
+  - name: caresync-q-alert
+    newTag: dev
+  - name: caresync-q-careplan
+    newTag: dev
+  - name: caresync-q-prescription
+    newTag: dev
+  - name: caresync-q-dossier
+    newTag: dev
+  - name: caresync-q-patient
+    newTag: dev
+  - name: caresync-q-messaging
+    newTag: dev
+  - name: caresync-q-analytics
+    newTag: dev
+  - name: caresync-q-audit
+    newTag: dev
+  - name: caresync-frontend
+    newTag: dev
+
+# Config non-sensible commune aux 11 services — noms de Service des
+# dépendances in-cluster dev. "redis" et "keycloak" sont des noms figés (non
+# paramétrables) car caresync-q-gateway les référence en dur en %prod
+# (application.yml), pas via variable d'env.
+generatorOptions:
+  # Noms stables (sans suffixe de hash) : le renommage auto de kustomize pour
+  # les références envFrom ne se propage pas de façon fiable jusqu'aux
+  # Deployments inclus transitivement via ../../base (vérifié empiriquement
+  # avec kubectl kustomize) ; des noms fixes évitent tout risque de
+  # désynchronisation. Cohérent avec prod, où le Secret géré par ESO garde
+  # lui aussi un nom stable (refreshInterval, pas de rename).
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: caresync-common-config
+    literals:
+      - DB_HOST=postgres
+      - KAFKA_BROKERS=kafka:9092
+      - KEYCLOAK_URL=http://keycloak:8180/realms/caresync
+      - REDIS_URL=redis://redis:6379
+      - MQTT_HOST=mosquitto
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector.observability.svc.cluster.local:4317
+      # Logs applicatifs poussés en OTLP vers le Collector (pas de DaemonSet
+      # Promtail : plus simple, même chemin que traces/métriques).
+      - QUARKUS_OTEL_LOGS_ENABLED=true
+
+# Secrets dev : mêmes identifiants partagés pour les 11 services (un seul
+# Postgres léger multi-DB en dev, cf. postgres-values.yaml). Le fichier
+# secrets/db.env est généré en CI depuis les GitHub Secrets DEV_DB_USER/
+# DEV_DB_PASSWORD (jamais committé — seul secrets/db.env.example l'est).
+secretGenerator:
+  - name: caresync-gateway-secrets
+    envs: [secrets/db.env]
+  - name: caresync-etablissement-secrets
+    envs: [secrets/db.env]
+  - name: caresync-iot-secrets
+    envs: [secrets/db.env]
+  - name: caresync-alert-secrets
+    envs: [secrets/db.env]
+  - name: caresync-careplan-secrets
+    envs: [secrets/db.env]
+  - name: caresync-prescription-secrets
+    envs: [secrets/db.env]
+  - name: caresync-dossier-secrets
+    envs: [secrets/db.env]
+  - name: caresync-patient-secrets
+    envs: [secrets/db.env]
+  - name: caresync-messaging-secrets
+    envs: [secrets/db.env]
+  - name: caresync-analytics-secrets
+    envs: [secrets/db.env]
+  - name: caresync-audit-secrets
+    envs: [secrets/db.env]

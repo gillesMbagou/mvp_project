@@ -1,0 +1,60 @@
+# Overlay prod — dépendances externes/managées (Kafka/Postgres/Keycloak/Vault/
+# Redis/Mosquitto NE SONT PAS déployées par ce pipeline, cf. infra/README.md).
+# Les secrets sensibles (DB_USER/DB_PASS) proviennent d'External Secrets
+# Operator + Vault, déjà en place (infra/terraform/vault, infra/k8s/external-secrets/)
+# — ce pipeline ne fait qu'appliquer ces manifestes, il ne touche jamais Vault.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - ../../frontend
+  - ingress-prod.yaml
+  - hpa.yaml
+  - ../../external-secrets
+
+patches:
+  - path: replicas-patch.yaml
+    target:
+      kind: Deployment
+      labelSelector: app.kubernetes.io/part-of=caresync
+  - path: resources-patch.yaml
+    target:
+      kind: Deployment
+      labelSelector: app.kubernetes.io/part-of=caresync
+
+images:
+  - name: caresync-q-gateway
+    newTag: latest
+  - name: caresync-q-etablissement
+    newTag: latest
+  - name: caresync-q-iot
+    newTag: latest
+  - name: caresync-q-alert
+    newTag: latest
+  - name: caresync-q-careplan
+    newTag: latest
+  - name: caresync-q-prescription
+    newTag: latest
+  - name: caresync-q-dossier
+    newTag: latest
+  - name: caresync-q-patient
+    newTag: latest
+  - name: caresync-q-messaging
+    newTag: latest
+  - name: caresync-q-analytics
+    newTag: latest
+  - name: caresync-q-audit
+    newTag: latest
+  - name: caresync-frontend
+    newTag: latest
+
+# Config non-sensible : endpoints des dépendances externes/managées, valeurs
+# réelles substituées en CI depuis PROD_KAFKA_BROKERS / PROD_DB_HOST /
+# PROD_KEYCLOAK_URL / PROD_REDIS_HOST / PROD_MQTT_HOST (voir backend-cd-prod.yml).
+configMapGenerator:
+  - name: caresync-common-config
+    envs: [configmap-prod.env]
+
+generatorOptions:
+  disableNameSuffixHash: true

@@ -1,0 +1,21 @@
+# helm upgrade --install redis bitnami/redis -n caresync -f redis-values.yaml
+#
+# Standalone, sans HA — dev uniquement. fullnameOverride=redis IMPÉRATIF :
+# caresync-q-gateway a "redis://redis:6379" en dur en %prod (pas de variable
+# d'env), donc le Service doit s'appeler exactement "redis".
+fullnameOverride: redis
+
+architecture: standalone
+
+auth:
+  enabled: false
+
+master:
+  persistence:
+    enabled: false
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 250m, memory: 128Mi}
+
+replica:
+  replicaCount: 0

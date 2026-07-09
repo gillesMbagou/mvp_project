@@ -1,0 +1,32 @@
+# Sous-kustomization dédiée : permet à overlays/prod de référencer ce dossier
+# comme une seule ressource (../../external-secrets), au lieu de fichiers plats
+# individuels que la politique de sécurité par défaut de Kustomize interdit de
+# référencer hors de la racine de l'overlay appelant.
+#
+# patient-deployment-snippet.yaml n'est volontairement PAS listé ici : c'est un
+# extrait illustratif minimal (pas de probes/resources), pas une ressource à
+# déployer telle quelle — le vrai Deployment patient vient de ../base/services/patient.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - cluster-secret-store.yaml
+  - patient-external-secret.yaml
+  - alert-secret-store.yaml
+  - alert-external-secret.yaml
+  - analytics-secret-store.yaml
+  - analytics-external-secret.yaml
+  - audit-secret-store.yaml
+  - audit-external-secret.yaml
+  - careplan-secret-store.yaml
+  - careplan-external-secret.yaml
+  - dossier-secret-store.yaml
+  - dossier-external-secret.yaml
+  - etablissement-secret-store.yaml
+  - etablissement-external-secret.yaml
+  - iot-secret-store.yaml
+  - iot-external-secret.yaml
+  - messaging-secret-store.yaml
+  - messaging-external-secret.yaml
+  - prescription-secret-store.yaml
+  - prescription-external-secret.yaml

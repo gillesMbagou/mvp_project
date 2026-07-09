@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: caresync-q-iot
+  labels:
+    app.kubernetes.io/name: caresync-q-iot
+    app.kubernetes.io/part-of: caresync
+    app.kubernetes.io/component: backend
+spec:
+  selector:
+    app.kubernetes.io/name: caresync-q-iot
+  ports:
+    - name: http
+      port: 8092
+      targetPort: http

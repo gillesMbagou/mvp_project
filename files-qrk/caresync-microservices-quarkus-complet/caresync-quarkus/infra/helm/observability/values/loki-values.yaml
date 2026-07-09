@@ -1,0 +1,57 @@
+# helm upgrade --install loki grafana-community/loki -n observability -f loki-values.yaml
+#
+# Mode "monolithic" filesystem — dev uniquement (pas de stockage objet S3/GCS).
+# Promtail (DaemonSet) scrape stdout de tous les pods du cluster et pousse
+# vers ce Loki, ce qui capte aussi les logs JSON structurés Quarkus
+# (quarkus.log.console.json=true en %prod, cf. pom.xml / application.yml).
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: 500m, memory: 512Mi}
+
+# Composants microservices désactivés (mode SingleBinary uniquement)
+backend:
+  replicas: 0
+read:
+  replicas: 0
+write:
+  replicas: 0
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+  selfMonitoring:
+    enabled: false
+  lokiCanary:
+    enabled: false
+
+test:
+  enabled: false
+
+gateway:
+  enabled: true
+  resources:
+    requests: {cpu: 25m, memory: 32Mi}
+    limits: {cpu: 100m, memory: 64Mi}

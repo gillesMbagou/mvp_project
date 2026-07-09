@@ -1,0 +1,26 @@
+# Un seul ServiceMonitor pour les 11 microservices Quarkus (sélecteur sur
+# app.kubernetes.io/component=backend, propre aux Service des 11 microservices
+# — le frontend porte part-of=caresync mais pas component=backend, il n'a pas
+# de /q/metrics), plutôt qu'un ServiceMonitor par service. Nécessite les CRD
+# Prometheus Operator (installées par kube-prometheus-stack, cf.
+# infra/helm/observability/values/kube-prometheus-stack-values.yaml) déjà en
+# place dans le cluster avant d'appliquer ce manifeste.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: caresync-quarkus-services
+  namespace: observability
+  labels:
+    app.kubernetes.io/part-of: caresync
+spec:
+  namespaceSelector:
+    matchNames:
+      - caresync
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: caresync
+      app.kubernetes.io/component: backend
+  endpoints:
+    - port: http
+      path: /q/metrics
+      interval: 30s

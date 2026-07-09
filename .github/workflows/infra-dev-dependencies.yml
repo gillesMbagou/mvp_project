@@ -1,0 +1,66 @@
+name: Infra dev — dépendances (Kafka/Postgres/Keycloak/Vault/Redis/Mosquitto)
+
+# Déclenchement manuel uniquement : ces dépendances ne changent pas à chaque
+# push applicatif, contrairement aux images des microservices. À relancer
+# après modification d'un fichier infra/helm/dev-dependencies/values/*.
+on:
+  workflow_dispatch: {}
+
+env:
+  BACKEND_DIR: files-qrk/caresync-microservices-quarkus-complet/caresync-quarkus
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+      - uses: azure/setup-helm@v4
+
+      - name: Configurer kubeconfig
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBE_CONFIG_DEV }}" | base64 -d > "$HOME/.kube/config"
+
+      - name: Namespace caresync
+        run: kubectl create namespace caresync --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Ajouter les repos Helm
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add hashicorp https://helm.releases.hashicorp.com
+          helm repo update
+
+      - name: Realm Keycloak dev (ConfigMap)
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          kubectl -n caresync create configmap keycloak-realm-dev \
+            --from-file=caresync-realm.json=infra/keycloak/caresync-realm-dev.json \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Postgres (multi-DB)
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: helm upgrade --install postgres bitnami/postgresql -n caresync -f infra/helm/dev-dependencies/values/postgres-values.yaml --wait --timeout 5m
+
+      - name: Kafka
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: helm upgrade --install kafka bitnami/kafka -n caresync -f infra/helm/dev-dependencies/values/kafka-values.yaml --wait --timeout 5m
+
+      - name: Redis
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: |
+          helm upgrade --install redis bitnami/redis -n caresync -f infra/helm/dev-dependencies/values/redis-values.yaml --wait --timeout 5m
+          kubectl apply -f infra/helm/dev-dependencies/redis-alias-service.yaml
+
+      - name: Keycloak
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: helm upgrade --install keycloak bitnami/keycloak -n caresync -f infra/helm/dev-dependencies/values/keycloak-values.yaml --wait --timeout 8m
+
+      - name: Vault (mode dev)
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: helm upgrade --install vault hashicorp/vault -n caresync -f infra/helm/dev-dependencies/values/vault-values.yaml
+
+      - name: Mosquitto
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: kubectl kustomize infra/helm/dev-dependencies/mosquitto | kubectl apply -f -
