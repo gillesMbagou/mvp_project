@@ -1,9 +1,11 @@
 package be.caresync.alert.processor;
 
+import be.caresync.alert.entity.Alert;
 import be.caresync.common.events.AlertCreatedEvent;
 import be.caresync.common.events.IoTObservationEvent;
-import io.smallrye.mutiny.Uni;
+import io.smallrye.common.annotation.Blocking;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.reactive.messaging.Outgoing;
@@ -52,11 +54,13 @@ public class AlertProcessor {
      */
     @Incoming("iot-observations")
     @Outgoing("clinical-alerts")
-    public Uni<AlertCreatedEvent> evaluate(IoTObservationEvent obs) {
+    @Blocking
+    @Transactional
+    public AlertCreatedEvent evaluate(IoTObservationEvent obs) {
         String severity = evaluateSeverity(obs);
 
         if ("NORMAL".equals(severity)) {
-            return Uni.createFrom().nullItem();  // Pas d'alerte → rien publié
+            return null;  // Pas d'alerte → rien publié
         }
 
         AlertCreatedEvent alert = AlertCreatedEvent.builder()
@@ -72,10 +76,28 @@ public class AlertProcessor {
                 .createdAt(Instant.now())
                 .build();
 
+        // Persisté ici : AlertProcessor était jusqu'ici un pur transform
+        // Kafka → Kafka, sans aucune trace consultable via /api/v1/alertes
+        // (AlertResource, nouvellement créée, lit cette même table).
+        Alert.builder()
+                .alertId(alert.getAlertId())
+                .patientId(alert.getPatientId())
+                .deviceSerial(alert.getDeviceSerial())
+                .deviceType(alert.getDeviceType())
+                .loincCode(alert.getLoincCode())
+                .severity(alert.getSeverity())
+                .message(alert.getMessage())
+                .triggeredValue(alert.getTriggeredValue())
+                .thresholdType(alert.getThresholdType())
+                .createdAt(alert.getCreatedAt())
+                .statut(Alert.Statut.OUVERTE)
+                .build()
+                .persist();
+
         log.warn("🔴 ALERTE {} | patient={} | {} {}",
                 severity, obs.getPatientId(), obs.getValue(), obs.getUnit());
 
-        return Uni.createFrom().item(alert);
+        return alert;
     }
 
     // ── Évaluation clinique ───────────────────────────────────────────

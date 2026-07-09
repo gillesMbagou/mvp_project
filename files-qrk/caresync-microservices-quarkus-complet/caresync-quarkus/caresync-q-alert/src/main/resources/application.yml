@@ -36,6 +36,8 @@ mp:
         failure-strategy: dead-letter-queue
         dead-letter-queue:
           topic: caresync.iot.observations.dlq
+          value:
+            serializer: io.quarkus.kafka.client.serialization.ObjectMapperSerializer
         value:
           deserializer: be.caresync.common.events.IoTObservationEventDeserializer
     outgoing:

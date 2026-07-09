@@ -15,6 +15,14 @@
       "publicClient": true,
       "directAccessGrantsEnabled": true,
       "redirectUris": ["*"]
+    },
+    {
+      "clientId": "caresync-frontend",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"]
     }
   ],
   "users": [
@@ -22,6 +30,9 @@
       "username": "dr.house",
       "enabled": true,
       "email": "dr.house@caresync.be",
+      "emailVerified": true,
+      "firstName": "Gregory",
+      "lastName": "House",
       "credentials": [
         { "type": "password", "value": "medecin", "temporary": false }
       ],
@@ -31,6 +42,9 @@
       "username": "nurse.joy",
       "enabled": true,
       "email": "nurse.joy@caresync.be",
+      "emailVerified": true,
+      "firstName": "Joy",
+      "lastName": "Nurse",
       "credentials": [
         { "type": "password", "value": "infirmier", "temporary": false }
       ],

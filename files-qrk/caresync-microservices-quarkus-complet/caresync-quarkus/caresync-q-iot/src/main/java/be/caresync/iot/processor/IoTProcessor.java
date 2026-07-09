@@ -1,11 +1,14 @@
 package be.caresync.iot.processor;
 
 import be.caresync.common.events.IoTObservationEvent;
+import be.caresync.iot.entity.IoTDevice;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.reactive.messaging.MutinyEmitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.reactive.messaging.*;
 
@@ -52,18 +55,21 @@ public class IoTProcessor {
      */
     @Incoming("mqtt-glucose")   // Source: MQTT via smallrye-mqtt
     @Outgoing("observations-out") // Destination: Kafka topic
+    @Blocking
     public IoTObservationEvent processGlucose(byte[] payload) {
         return enrichObservation(payload, "GLUCOMETER");
     }
 
     @Incoming("mqtt-spo2")
     @Outgoing("observations-out")
+    @Blocking
     public IoTObservationEvent processSpo2(byte[] payload) {
         return enrichObservation(payload, "PULSE_OXIMETER");
     }
 
     @Incoming("mqtt-weight")
     @Outgoing("observations-out")
+    @Blocking
     public IoTObservationEvent processWeight(byte[] payload) {
         return enrichObservation(payload, "SCALE");
     }
@@ -79,6 +85,8 @@ public class IoTProcessor {
             // Évaluation sévérité
             obs.setSeverity(obs.computeSeverity());
 
+            upsertDevice(obs, deviceType);
+
             log.debug("→ Kafka [{}] {} {} [{}] latence={}ms",
                     deviceType, obs.getValue(), obs.getUnit(), obs.getSeverity(), latency);
 
@@ -88,5 +96,32 @@ public class IoTProcessor {
             log.error("Erreur parsing MQTT payload : {}", ex.getMessage());
             throw new RuntimeException(ex);
         }
+    }
+
+    /**
+     * Auto-provisioning du registre IoTDevice (IoTDeviceResource) : un device
+     * qui émet de la télémétrie sans avoir jamais été explicitement enregistré
+     * via POST /api/v1/iot-devices existe quand même — on le crée à la volée,
+     * et on rafraîchit sa dernière valeur/observation à chaque message reçu.
+     */
+    @Transactional
+    void upsertDevice(IoTObservationEvent obs, String deviceType) {
+        IoTDevice device = IoTDevice.findById(obs.getDeviceSerial());
+        if (device == null) {
+            device = IoTDevice.builder()
+                    .serial(obs.getDeviceSerial())
+                    .patientId(obs.getPatientId())
+                    .deviceType(deviceType)
+                    .loincCode(obs.getLoincCode())
+                    .unit(obs.getUnit())
+                    .active(true)
+                    .registeredAt(Instant.now())
+                    .build();
+        }
+        device.setPatientId(obs.getPatientId());
+        device.setActive(true);
+        device.setLastObservedAt(Instant.now());
+        device.setLastValue(obs.getValue());
+        device.persist();
     }
 }

@@ -2,6 +2,7 @@
 package be.caresync.gateway;
 
 import io.quarkus.vertx.web.Route;
+import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.HttpClientOptions;
@@ -55,6 +56,25 @@ public class GatewayProxy {
         Map.entry("/api/v1/audit",          new ServiceTarget("caresync-q-audit",         8100))
     );
 
+    /**
+     * EventSource (SSE côté navigateur) ne peut pas fixer de header custom —
+     * le frontend passe donc le JWT en query param (?token=...) pour /api/stream/*.
+     * quarkus-oidc + quarkus.http.auth.permission.api.policy=authenticated
+     * n'inspectent que le header Authorization standard : sans cette réécriture,
+     * toute connexion SSE via EventSource échoue en 401 avant même d'atteindre
+     * proxy() ci-dessous. Priorité basse = exécuté tôt, avant la policy d'auth.
+     */
+    @RouteFilter(1000)
+    void bearerFromQueryParam(RoutingContext ctx) {
+        if (ctx.request().getHeader("Authorization") == null) {
+            String token = ctx.request().getParam("token");
+            if (token != null && !token.isBlank()) {
+                ctx.request().headers().add("Authorization", "Bearer " + token);
+            }
+        }
+        ctx.next();
+    }
+
     // Pas de filtre "methods" : @Route matche toutes les méthodes HTTP par défaut (GET/POST/PUT/PATCH/DELETE/...)
     @Route(path = "/api/*")
     public void proxy(RoutingContext ctx) {
@@ -92,12 +112,16 @@ public class GatewayProxy {
 
     private void forwardRequest(RoutingContext ctx, ServiceTarget target,
                                  String userId, String tenant) {
+        // /api/stream/* (SSE) reste ouvert indéfiniment côté client — un idleTimeout
+        // de 30s couperait la connexion dès qu'aucune observation n'arrive pendant
+        // 30s, ce qui est courant hors simulation active de dispositifs IoT.
+        boolean isStream = ctx.request().path().startsWith("/api/stream");
         HttpClient client = vertx.createHttpClient(
             new HttpClientOptions()
                 .setDefaultHost(target.host())
                 .setDefaultPort(target.port())
                 .setConnectTimeout(3000)
-                .setIdleTimeout(30)
+                .setIdleTimeout(isStream ? 0 : 30)
         );
 
         String requestId = java.util.UUID.randomUUID().toString();
@@ -123,11 +147,11 @@ public class GatewayProxy {
             // Forwarder le body si présent
             if (ctx.body().buffer() != null) {
                 req.send(ctx.body().buffer()).onSuccess(resp -> {
-                    forwardResponse(ctx, resp, target, requestId);
+                    forwardResponse(ctx, resp, target, requestId, isStream);
                 }).onFailure(err -> handleUpstreamError(ctx, target, err));
             } else {
                 req.send().onSuccess(resp -> {
-                    forwardResponse(ctx, resp, target, requestId);
+                    forwardResponse(ctx, resp, target, requestId, isStream);
                 }).onFailure(err -> handleUpstreamError(ctx, target, err));
             }
         }).onFailure(err -> handleUpstreamError(ctx, target, err));
@@ -135,14 +159,41 @@ public class GatewayProxy {
 
     private void forwardResponse(RoutingContext ctx,
                                   io.vertx.core.http.HttpClientResponse resp,
-                                  ServiceTarget target, String requestId) {
+                                  ServiceTarget target, String requestId, boolean isStream) {
         circuits.recordSuccess(target.host());
 
         ctx.response().setStatusCode(resp.statusCode());
         resp.headers().forEach(h -> ctx.response().putHeader(h.getKey(), h.getValue()));
         ctx.response().putHeader("X-Request-Id", requestId);
 
-        resp.body().onSuccess(ctx.response()::end);
+        if (isStream) {
+            // resp.body() bufferise la réponse entière avant de répondre : pour un
+            // flux SSE, le body ne se termine jamais, donc le client (EventSource)
+            // ne reçoit ni headers ni données tant que la connexion vit. pipeTo()
+            // relaie les chunks au fil de l'eau.
+            //
+            // Vert.x n'envoie les en-têtes qu'au premier write() sur la réponse —
+            // sans donnée immédiate (cas normal tant qu'aucun événement Kafka
+            // n'arrive), le client resterait bloqué sans même recevoir le
+            // 200/Content-Type. setChunked(true) + un write() vide forcent l'envoi
+            // immédiat des en-têtes avant que pipeTo() ne prenne le relais.
+            //
+            // Cache-Control: no-transform — sans Content-Length (cas normal d'un
+            // flux chunked infini), les middlewares de compression à la Connect/
+            // Express (ex. celui du dev-server Vite utilisé par `ng serve`)
+            // bufferisent la réponse entière avant de décider s'ils compressent,
+            // ce qui bloque indéfiniment un flux SSE traversant un tel proxy.
+            // no-transform leur signale explicitement de ne pas y toucher.
+            ctx.response().putHeader("Cache-Control", "no-cache, no-transform");
+            ctx.response().setChunked(true);
+            ctx.response().write(io.vertx.core.buffer.Buffer.buffer());
+            resp.pipeTo(ctx.response());
+        } else {
+            // Réponses REST classiques : bufferiser tout le body avant de répondre
+            // reste le comportement le plus simple/robuste (taille connue à l'avance,
+            // pas de round-trip supplémentaire pour forcer le flush des en-têtes).
+            resp.body().onSuccess(ctx.response()::end);
+        }
 
         log.debugf("[%s] %s → %s:%d → %d",
             requestId, ctx.request().path(),
