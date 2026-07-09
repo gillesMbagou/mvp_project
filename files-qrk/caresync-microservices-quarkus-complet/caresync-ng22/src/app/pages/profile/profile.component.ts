@@ -14,7 +14,7 @@ import { KeycloakAuthService } from '../../core/auth/keycloak.service';
   @if (auth.currentUser(); as user) {
     <div class="cs-card" style="display:flex;align-items:center;gap:16px">
       <div style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;
-                  justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0;
+                  justify-content:center;font-size:18px;font-weight:700;color:var(--cs-teal-contrast);flex-shrink:0;
                   background:var(--cs-teal)">
         {{ auth.userInitials() }}
       </div>

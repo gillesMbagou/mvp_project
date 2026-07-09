@@ -33,6 +33,13 @@ $yellow: (50: #fefce8, 100: #fef9c3, 200: #fef08a, 300: #fde047, 400: #facc15, 5
   --p-primary-900: #{map.get($shades, 900)};
   --p-primary-950: #{map.get($shades, 950)};
 
+  // Tokens de marque CareSync (logo, avatars, badges, hovers, liens, carte KPI
+  // "info") — suivent l'accent choisi. Les couleurs de sévérité clinique
+  // (--cs-critique/--cs-urgente/--cs-normal) restent volontairement fixes,
+  // ce ne sont pas des tokens de marque.
+  --cs-teal:      #{map.get($shades, 500)};
+  --cs-teal-dark: #{map.get($shades, 600)};
+
   @if $mode == 'dark' {
     $c: #18181b;
     @if $contrast { $c: $contrast; }
@@ -45,6 +52,9 @@ $yellow: (50: #fefce8, 100: #fef9c3, 200: #fef08a, 300: #fde047, 400: #facc15, 5
     --p-highlight-focus-background: #{rgba(map.get($shades, 400), .24)};
     --p-highlight-color:            #{map.get($shades, 300)};
     --p-highlight-focus-color:      #{map.get($shades, 200)};
+
+    --cs-teal-light:    #{rgba(map.get($shades, 500), .15)};
+    --cs-teal-contrast: #{$c};
   } @else {
     $c: #ffffff;
     @if $contrast { $c: $contrast; }
@@ -57,5 +67,8 @@ $yellow: (50: #fefce8, 100: #fef9c3, 200: #fef08a, 300: #fde047, 400: #facc15, 5
     --p-highlight-focus-background: #{map.get($shades, 100)};
     --p-highlight-color:            #{map.get($shades, 700)};
     --p-highlight-focus-color:      #{map.get($shades, 800)};
+
+    --cs-teal-light:    #{map.get($shades, 50)};
+    --cs-teal-contrast: #{$c};
   }
 }

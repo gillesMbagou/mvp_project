@@ -54,7 +54,7 @@ interface GlucosePoint {
           style="padding:5px 14px;border-radius:6px;border:none;font-size:12px;
                  font-weight:500;cursor:pointer;transition:all .15s"
           [style.background]="period() === p.value ? 'var(--cs-teal)' : 'transparent'"
-          [style.color]="period() === p.value ? '#fff' : 'var(--cs-text-2)'"
+          [style.color]="period() === p.value ? 'var(--cs-teal-contrast)' : 'var(--cs-text-2)'"
           (click)="period.set(p.value)">
           {{ p.label }}
         </button>

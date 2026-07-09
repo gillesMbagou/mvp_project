@@ -41,7 +41,7 @@ import { DeviceService } from '../../core/services/device.service';
                     background:var(--cs-surface-2);border:1px solid var(--cs-border)"
              [style.opacity]="d.active ? 1 : 0.5">
           <div style="width:36px;height:36px;border-radius:8px;display:flex;align-items:center;
-                      justify-content:center;flex-shrink:0;color:#fff;background:var(--cs-teal)">
+                      justify-content:center;flex-shrink:0;color:var(--cs-teal-contrast);background:var(--cs-teal)">
             <i class="pi pi-wifi"></i>
           </div>
           <div style="flex:1;min-width:0">

@@ -104,7 +104,7 @@ interface NavItem {
               <p-avatar
                 [label]="auth.userInitials()"
                 styleClass="mr-2"
-                [style]="{ background: 'var(--cs-teal)', color: '#fff', 'font-size': '12px' }"
+                [style]="{ background: 'var(--cs-teal)', color: 'var(--cs-teal-contrast)', 'font-size': '12px' }"
                 shape="circle" size="normal"/>
               <div style="overflow:hidden">
                 <div class="user-name">{{ user.firstName }} {{ user.lastName }}</div>
@@ -191,7 +191,7 @@ interface NavItem {
           @if (auth.currentUser(); as user) {
             <p-avatar
               [label]="auth.userInitials()"
-              [style]="{ background: 'var(--cs-teal)', color: '#fff', 'font-size': '12px', cursor: 'pointer' }"
+              [style]="{ background: 'var(--cs-teal)', color: 'var(--cs-teal-contrast)', 'font-size': '12px', cursor: 'pointer' }"
               shape="circle" size="normal"
               (click)="showUserMenu = !showUserMenu"/>
           }
