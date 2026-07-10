@@ -1,0 +1,5 @@
+# Artefacts générés par generate_seed.py / generate_dossier_seed.py — régénérables
+# à la demande (voir README.md), pas versionnés (gros fichiers, dépendent de l'état
+# courant de la base).
+*.sql
+patients_export.psv

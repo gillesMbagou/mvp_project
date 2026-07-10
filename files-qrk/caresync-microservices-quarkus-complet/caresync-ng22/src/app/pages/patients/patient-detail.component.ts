@@ -1,7 +1,8 @@
 import {
-  Component, inject, input, effect, ChangeDetectionStrategy
+  Component, inject, input, effect, computed, ChangeDetectionStrategy
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { DatePipe } from '@angular/common';
 import { ButtonModule } from 'primeng/button';
 import { SkeletonModule } from 'primeng/skeleton';
 import { TagModule } from 'primeng/tag';
@@ -11,6 +12,8 @@ import { PatientService } from '../../core/services/patient.service';
 import { CarePlanService } from '../../core/services/careplan.service';
 import { PrescriptionService } from '../../core/services/prescription.service';
 import { DossierService } from '../../core/services/dossier.service';
+import { AlertService } from '../../core/services/alert.service';
+import { DeviceService } from '../../core/services/device.service';
 
 /**
  * PatientDetailComponent — fiche patient.
@@ -28,7 +31,7 @@ import { DossierService } from '../../core/services/dossier.service';
   selector: 'app-patient-detail',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, ButtonModule, SkeletonModule, TagModule, TabsModule],
+  imports: [RouterLink, DatePipe, ButtonModule, SkeletonModule, TagModule, TabsModule],
   template: `
 <div style="display:flex;flex-direction:column;gap:20px">
 
@@ -65,18 +68,23 @@ import { DossierService } from '../../core/services/dossier.service';
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
       <div class="cs-kpi cs-kpi--critique">
+        <i class="pi pi-bell kpi-icon"></i>
         <div class="kpi-label">Alertes actives</div>
-        <div class="kpi-value">{{ patient.activeAlerts }}</div>
+        <div class="kpi-value">{{ activeAlertsCount() }}</div>
       </div>
       <div class="cs-kpi cs-kpi--info">
+        <i class="pi pi-wifi kpi-icon"></i>
         <div class="kpi-label">Dispositifs connectés</div>
-        <div class="kpi-value">{{ patient.connectedDevices }}</div>
+        <div class="kpi-value">{{ patientDevices().length }}</div>
       </div>
       <div class="cs-kpi cs-kpi--normal">
+        <i class="pi pi-heart kpi-icon"></i>
         <div class="kpi-label">Dernière mesure</div>
-        <div class="kpi-value" style="font-size:20px">{{ patient.lastMeasure ?? '—' }}</div>
-        @if (patient.lastMeasureAt) {
-          <div class="kpi-delta">{{ patient.lastMeasureAt }}</div>
+        @if (lastMeasure(); as m) {
+          <div class="kpi-value" style="font-size:20px">{{ m.value }} {{ m.unit }}</div>
+          <div class="kpi-delta">{{ m.deviceType }} · {{ m.observedAt | date:'short' }}</div>
+        } @else {
+          <div class="kpi-value" style="font-size:20px">—</div>
         }
       </div>
     </div>
@@ -169,9 +177,29 @@ export class PatientDetailComponent {
   readonly carePlanSvc     = inject(CarePlanService);
   readonly prescriptionSvc = inject(PrescriptionService);
   readonly dossierSvc      = inject(DossierService);
+  readonly alertSvc        = inject(AlertService);
+  readonly deviceSvc       = inject(DeviceService);
 
   // Bindé automatiquement depuis le paramètre de route ':id'
   readonly id = input<string>('');
+
+  // Les cartes KPI (Alertes actives / Dispositifs connectés / Dernière mesure)
+  // lisaient patient.activeAlerts/connectedDevices/lastMeasure — des champs
+  // qui n'existent pas sur l'entité Patient backend (patient-svc ne les
+  // calcule pas). Recalculées ici côté frontend à partir des services dédiés
+  // (AlertResource supporte déjà ?patientId=, DeviceService.devices() couvre
+  // le registre iot-devices) plutôt que d'attendre un futur champ agrégé.
+  readonly activeAlertsCount = this.alertSvc.patientActiveAlertsCount;
+
+  readonly patientDevices = computed(() =>
+    this.deviceSvc.devices().filter(d => d.patientId === this.id())
+  );
+
+  readonly lastMeasure = computed(() => {
+    const withMeasure = this.patientDevices().filter(d => d.observedAt && d.value !== undefined);
+    if (withMeasure.length === 0) return null;
+    return withMeasure.reduce((latest, d) => (d.observedAt! > latest.observedAt! ? d : latest));
+  });
 
   constructor() {
     effect(() => {
@@ -181,6 +209,7 @@ export class PatientDetailComponent {
       this.carePlanSvc.forPatient(id);
       this.prescriptionSvc.forPatient(id);
       this.dossierSvc.open(id);
+      this.alertSvc.forPatient(id);
     });
   }
 

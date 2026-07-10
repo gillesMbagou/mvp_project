@@ -88,6 +88,30 @@ export class AlertService implements OnDestroy {
   // (au lieu de renvoyer undefined) — hasValue() est le garde-fou officiel.
   // Sans lui, une seule requête en échec (ex. caresync-q-alert indisponible)
   // fait planter TOUS les computed() en aval, y compris ceux d'autres pages.
+  // ── Alertes scopées à un patient (fiche patient) ─────────────────────────
+  // AlertResource.list() supporte déjà patientId en query param côté backend
+  // (be.caresync.alert.resource.AlertResource) — fenêtre large (720h = 30j)
+  // car une alerte OUVERTE non traitée doit rester visible au-delà de 24h.
+  readonly selectedPatientId = signal<string | null>(null);
+
+  readonly patientAlertsResource = httpResource<AlertEvent[]>(() =>
+    this.selectedPatientId()
+      ? { url: `${this.baseUrl}/alertes`, params: { patientId: this.selectedPatientId()!, hours: '720' } }
+      : undefined
+  );
+
+  readonly patientAlerts = computed(() =>
+    this.patientAlertsResource.hasValue() ? this.patientAlertsResource.value() : []
+  );
+
+  readonly patientActiveAlertsCount = computed(() =>
+    this.patientAlerts().filter(a => a.statut === 'OUVERTE').length
+  );
+
+  forPatient(patientId: string): void {
+    this.selectedPatientId.set(patientId);
+  }
+
   readonly alertsHistory   = computed(() =>
     this.alertsHistoryResource.hasValue() ? this.alertsHistoryResource.value() : []
   );
