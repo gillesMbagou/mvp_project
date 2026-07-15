@@ -39,9 +39,25 @@ jobs:
             --from-file=caresync-realm.json=infra/keycloak/caresync-realm-dev.json \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Postgres (multi-DB)
+      # Manifeste brut (pas un chart Helm) : image officielle timescale/timescaledb,
+      # nécessaire pour que les requêtes time_bucket() de caresync-q-analytics
+      # trouvent l'extension timescaledb — absente de l'image bitnami/postgresql
+      # utilisée jusqu'ici (cf. infra/helm/dev-dependencies/timescaledb/deployment.yaml).
+      #
+      # Le "helm uninstall" ci-dessous supprime l'ancien StatefulSet+PVC bitnami
+      # (release "postgres") s'il existe encore d'un run précédent : sans ça, son
+      # Service "postgres" (même nom, sélecteur de labels différent) entre en
+      # conflit avec celui posé par kubectl apply juste après, et les deux
+      # Postgres (bitnami sans Timescale / le nouveau avec) se répondraient en
+      # alternance derrière le même Service. Idempotent (--ignore-not-found
+      # n'existe pas sur "helm uninstall" : on avale l'erreur si la release
+      # n'existe pas déjà, ex. sur un cluster jamais provisionné avec l'ancien chart).
+      - name: Postgres + TimescaleDB (multi-DB)
         working-directory: ${{ env.BACKEND_DIR }}
-        run: helm upgrade --install postgres bitnami/postgresql -n caresync -f infra/helm/dev-dependencies/values/postgres-values.yaml --wait --timeout 5m
+        run: |
+          helm uninstall postgres -n caresync 2>/dev/null || true
+          kubectl kustomize infra/helm/dev-dependencies/timescaledb | kubectl apply -f -
+          kubectl -n caresync rollout status deployment/postgres --timeout=5m
 
       - name: Kafka
         working-directory: ${{ env.BACKEND_DIR }}

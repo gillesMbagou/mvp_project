@@ -21,6 +21,28 @@ quarkus:
     database:
       generation: update
 
+# ── Kafka : ingestion des observations IoT pour les séries temporelles ──
+# Sans ce consumer, la table "observations" restait vide (AnalyticsResource
+# n'avait jamais rien à agréger via time_bucket()).
+mp:
+  messaging:
+    incoming:
+      iot-observations:
+        connector: smallrye-kafka
+        topic: caresync.iot.observations
+        group:
+          id: caresync-analytics-ts
+        auto:
+          offset:
+            reset: earliest
+        failure-strategy: dead-letter-queue
+        dead-letter-queue:
+          topic: caresync.iot.observations.analytics.dlq
+          value:
+            serializer: io.quarkus.kafka.client.serialization.ObjectMapperSerializer
+        value:
+          deserializer: be.caresync.common.events.IoTObservationEventDeserializer
+
 # Note : quarkus.datasource.{username,password,jdbc.url} / kafka.bootstrap.servers
 # ne sont volontairement PAS fixés ici : les définir désactive les Dev Services
 # (Postgres, Kafka) qui démarrent automatiquement des conteneurs jetables en %dev.
@@ -31,6 +53,13 @@ quarkus:
   quarkus:
     devservices:
       enabled: true
+    datasource:
+      devservices:
+        # Image Timescale (superset Postgres) : sans elle, Dev Services lance
+        # un postgres:X standard sans l'extension timescaledb, et
+        # TimescaleHypertableInitializer se contente de loguer un warning
+        # (voir sa Javadoc) au lieu de créer l'hypertable.
+        image-name: timescale/timescaledb:2.17.2-pg16
     vault:
       kv-secret-engine-version: 2
       kv-secret-engine-mount-path: secret

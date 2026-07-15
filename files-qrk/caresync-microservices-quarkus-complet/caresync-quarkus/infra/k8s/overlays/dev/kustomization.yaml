@@ -67,7 +67,8 @@ configMapGenerator:
       - QUARKUS_OTEL_LOGS_ENABLED=true
 
 # Secrets dev : mêmes identifiants partagés pour les 11 services (un seul
-# Postgres léger multi-DB en dev, cf. postgres-values.yaml). Le fichier
+# Postgres+TimescaleDB léger multi-DB en dev, cf. infra/helm/dev-dependencies/
+# timescaledb/). Le fichier
 # secrets/db.env est généré en CI depuis les GitHub Secrets DEV_DB_USER/
 # DEV_DB_PASSWORD (jamais committé — seul secrets/db.env.example l'est).
 secretGenerator:

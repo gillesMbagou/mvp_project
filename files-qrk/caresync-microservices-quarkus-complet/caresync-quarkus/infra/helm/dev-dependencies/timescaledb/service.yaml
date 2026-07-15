@@ -1,0 +1,14 @@
+# Nom de Service "postgres" conservé à l'identique (fullnameOverride de
+# l'ancien chart bitnami) : c'est la valeur DB_HOST=postgres déjà référencée
+# par tous les microservices (infra/k8s/overlays/*/kustomization.yaml).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

@@ -1,0 +1,65 @@
+# Remplace l'ancien "helm upgrade --install postgres bitnami/postgresql"
+# (postgres-values.yaml, supprimé) : bitnami/postgresql ne peut pas servir de
+# base à TimescaleDB (l'extension n'est pas présente dans l'image bitnami, et
+# ses scripts d'entrypoint sont incompatibles avec une image tierce). L'image
+# officielle timescale/timescaledb est un simple superset de l'image
+# docker-library postgres : mêmes variables d'env, même mécanisme
+# docker-entrypoint-initdb.d, donc même style de manifeste que mosquitto/.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # un seul PVC ReadWriteOnce : pas de rolling update possible
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: timescale/timescaledb:2.17.2-pg16
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: {name: postgres-secrets, key: POSTGRES_USER}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: postgres-secrets, key: POSTGRES_PASSWORD}
+            - name: POSTGRES_DB
+              value: caresync_patient
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "caresync"]}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec: {command: ["pg_isready", "-U", "caresync"]}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts

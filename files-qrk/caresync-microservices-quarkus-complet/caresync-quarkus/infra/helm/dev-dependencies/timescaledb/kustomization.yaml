@@ -1,0 +1,17 @@
+# Pas de chart Helm pour un Postgres+TimescaleDB léger dev-only (le chart
+# officiel timescale/timescaledb-single vise la HA/Patroni, hors périmètre
+# ici) : manifeste brut, même approche que ../mosquitto/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: caresync
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - secret.yaml
+configMapGenerator:
+  - name: postgres-init-scripts
+    files:
+      - init-caresync-dbs.sql
+generatorOptions:
+  disableNameSuffixHash: true
